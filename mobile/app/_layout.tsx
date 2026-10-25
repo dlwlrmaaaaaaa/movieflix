@@ -2,12 +2,16 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { registerGlobals } from '@livekit/react-native';
 import { AuthProvider } from '../src/context/AuthContext';
 import { SocketProvider } from '../src/context/SocketContext';
 import { RoomProvider } from '../src/context/RoomContext';
 import { PlaybackSyncProvider } from '../src/context/PlaybackSyncContext';
 import { CallProvider } from '../src/context/CallContext';
 import { colors } from '../src/theme';
+
+// Polyfill WebRTC globals for LiveKit voice & video calling
+registerGlobals();
 
 export default function RootLayout() {
   return (

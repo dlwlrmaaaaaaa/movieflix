@@ -40,8 +40,19 @@
     },
     "plugins": [
       "expo-router",
-      "expo-video"
+      "expo-video",
+      "@livekit/react-native-expo-plugin",
+      "@config-plugins/react-native-webrtc"
     ],
-    "scheme": "togetherflix"
+    "scheme": "togetherflix",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "9014f563-67ca-46b3-8073-4a9193fe9f62"
+      }
+    },
+    "owner": "devareajustins-team"
   }
 }
