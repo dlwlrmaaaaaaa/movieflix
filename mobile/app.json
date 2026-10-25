@@ -40,14 +40,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-video",
-      [
-        "@livekit/react-native",
-        {
-          "cameraPermission": "Allow TogetherFlix to access your camera for video calls.",
-          "microphonePermission": "Allow TogetherFlix to access your microphone to talk with your partner."
-        }
-      ]
+      "expo-video"
     ],
     "scheme": "togetherflix"
   }
