@@ -1,0 +1,120 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RoomStatus {
+  WAITING
+  COMPATIBILITY_CHECK
+  WATCHING
+  ENDED
+}
+
+enum PartnerInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  passwordHash    String
+  displayName     String
+  avatarUrl       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  partnerId       String?          @unique
+  partner         User?            @relation("CoupleRelation", fields: [partnerId], references: [id])
+  partnerOf       User?            @relation("CoupleRelation")
+
+  sentInvites     PartnerInvite[]  @relation("SentInvites")
+  receivedInvites PartnerInvite[]  @relation("ReceivedInvites")
+
+  hostedRooms     Room[]           @relation("HostedRooms")
+  guestRooms      Room[]           @relation("GuestRooms")
+  movieHistories  MovieHistory[]
+
+  @@index([email])
+}
+
+model PartnerInvite {
+  id          String              @id @default(uuid())
+  senderId    String
+  sender      User                @relation("SentInvites", fields: [senderId], references: [id], onDelete: Cascade)
+  inviteEmail String
+  receiverId  String?
+  receiver    User?               @relation("ReceivedInvites", fields: [receiverId], references: [id], onDelete: SetNull)
+  code        String              @unique
+  status      PartnerInviteStatus @default(PENDING)
+  createdAt   DateTime            @default(now())
+  expiresAt   DateTime
+
+  @@index([code])
+  @@index([inviteEmail])
+}
+
+model Room {
+  id                  String          @id @default(uuid())
+  code                String          @unique
+  status              RoomStatus      @default(WAITING)
+  hostId              String
+  host                User            @relation("HostedRooms", fields: [hostId], references: [id])
+  guestId             String?
+  guest               User?           @relation("GuestRooms", fields: [guestId], references: [id])
+  isHostOnlyControl   Boolean         @default(false)
+  currentMovieTitle   String?
+  createdAt           DateTime        @default(now())
+  closedAt            DateTime?
+
+  filesMetadata       RoomMovieMeta[]
+  chatMessages        ChatMessage[]
+  history             MovieHistory?
+
+  @@index([code])
+}
+
+model RoomMovieMeta {
+  id              String   @id @default(uuid())
+  roomId          String
+  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId          String
+  fileName        String
+  durationSeconds Float
+  fileSizeBytes   BigInt?
+  isReady         Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([roomId, userId])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId  String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([roomId])
+}
+
+model MovieHistory {
+  id              String   @id @default(uuid())
+  roomId          String   @unique
+  room            Room     @relation(fields: [roomId], references: [id])
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  partnerName     String
+  movieTitle      String
+  durationMinutes Int
+  watchedAt       DateTime @default(now())
+  notes           String?
+
+  @@index([userId])
+}
