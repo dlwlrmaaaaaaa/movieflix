@@ -1,8 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
+import { endAuthSession } from '../services/authSession.service';
 import { AuthService } from '../services/auth.service';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export class AuthController {
+  static async logout(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try { await endAuthSession(req.user!.id, req.sessionId); res.json({ success: true }); }
+    catch (error) { next(error); }
+  }
+
   static async register(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password, displayName } = req.body;

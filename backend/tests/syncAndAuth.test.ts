@@ -1,6 +1,10 @@
 import { SyncEngine } from '../src/sockets/utils/syncEngine';
 import { generateRoomCode } from '../src/utils/roomCode';
 import { generateToken, verifyToken } from '../src/utils/token';
+import { canHostControl, lateJoinPlayback, canStartSynchronizedPlayback, expectedPlaybackPosition } from '../src/sockets/utils/roomPolicy';
+import { detectStreamFormat, parsePublicStreamUrl } from '../src/services/streamValidation';
+import { validateImportedMpd } from '../src/services/mpdImport.service';
+import { isRecognizedLicenseUrl, normalizeMovieTitle } from '../src/providers/InternetArchiveProvider';
 
 describe('TogetherFlix Synchronization & Utilities Suite', () => {
   describe('Room Code Generator', () => {
@@ -108,6 +112,74 @@ describe('TogetherFlix Synchronization & Utilities Suite', () => {
       const payload = verifyToken(token);
       expect(payload.userId).toBe('test-user-123');
       expect(payload.email).toBe('test@togetherflix.com');
+    });
+  });
+
+  describe('Host-owned room playback', () => {
+    it('allows only the host to select media and control playback', () => {
+      expect(canHostControl('host-1', 'host-1')).toBe(true);
+      expect(canHostControl('host-1', 'guest-1')).toBe(false);
+    });
+
+    it('provides canonical state for a late-joining guest', () => {
+      expect(lateJoinPlayback(128.5, true)).toMatchObject({ action: 'PLAY', position: 128.5, isPlaying: true });
+      expect(lateJoinPlayback(-5, false)).toMatchObject({ action: 'PAUSE', position: 0, isPlaying: false });
+    });
+
+    it('requires both viewers to be ready for the selected cloud movie', () => {
+      const states = [
+        { userId: 'host-1', selectedMovieId: 'movie-1', state: 'READY' },
+        { userId: 'guest-1', selectedMovieId: 'movie-1', state: 'READY' },
+      ];
+      expect(canStartSynchronizedPlayback(['host-1', 'guest-1'], states, 'movie-1')).toBe(true);
+      expect(canStartSynchronizedPlayback(['host-1', 'guest-1'], [{ ...states[1], state: 'BUFFERING' }, states[0]], 'movie-1')).toBe(false);
+      expect(canStartSynchronizedPlayback(['host-1', 'guest-1'], states, 'movie-2')).toBe(false);
+    });
+
+    it('advances the canonical late-join position only while playing', () => {
+      expect(expectedPlaybackPosition(10, true, 1_000, 3_500)).toBe(12.5);
+      expect(expectedPlaybackPosition(10, false, 1_000, 3_500)).toBe(10);
+      // A future scheduled anchor has not started yet, so it must not advance.
+      expect(expectedPlaybackPosition(10, true, 5_000, 3_500)).toBe(10);
+    });
+  });
+
+  describe('Remote streaming source policy', () => {
+    it('detects DASH, HLS, MP4, and WebM URLs without fetching media', () => {
+      expect(detectStreamFormat(parsePublicStreamUrl('https://cdn.example.com/movie.mpd'))).toBe('DASH');
+      expect(detectStreamFormat(parsePublicStreamUrl('https://cdn.example.com/movie.m3u8'))).toBe('HLS');
+      expect(detectStreamFormat(parsePublicStreamUrl('https://cdn.example.com/movie.mp4'))).toBe('MP4');
+      expect(detectStreamFormat(parsePublicStreamUrl('https://cdn.example.com/movie.webm'))).toBe('WEBM');
+    });
+
+    it('rejects insecure and private streaming URLs before any server fetch', () => {
+      expect(() => parsePublicStreamUrl('http://example.com/movie.mpd')).toThrow('HTTPS');
+      expect(() => parsePublicStreamUrl('https://127.0.0.1/movie.mpd')).toThrow('public host');
+      expect(() => parsePublicStreamUrl('https://localhost/movie.mpd')).toThrow('public host');
+    });
+  });
+
+  describe('Internet Archive licensing policy', () => {
+    it('requires exact normalized title matching and a recognized license URL', () => {
+      expect(normalizeMovieTitle('Night of the Living Dead!')).toBe(normalizeMovieTitle('Night-of-the-Living-Dead'));
+      expect(isRecognizedLicenseUrl('https://creativecommons.org/publicdomain/mark/1.0/')).toBe(true);
+      expect(isRecognizedLicenseUrl('https://example.com/public-domain')).toBe(false);
+      expect(isRecognizedLicenseUrl('')).toBe(false);
+    });
+  });
+
+  describe('Local MPD manifest import', () => {
+    const minimalMpd = `<?xml version="1.0"?><MPD type="static"><Period><AdaptationSet contentType="video"><Representation id="v1" bandwidth="1000"><SegmentTemplate timescale="1" /></Representation></AdaptationSet><AdaptationSet contentType="audio"><Representation id="a1" bandwidth="128" /></AdaptationSet></Period></MPD>`;
+
+    it('accepts a safe DASH manifest and identifies audio/video representations', async () => {
+      const imported = await validateImportedMpd(minimalMpd);
+      expect(imported.videoRepresentations).toBe(1);
+      expect(imported.audioRepresentations).toBe(1);
+    });
+
+    it('rejects XML external entities and relative media without an authorized base', async () => {
+      await expect(validateImportedMpd(minimalMpd.replace('<MPD', '<!DOCTYPE MPD [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><MPD'))).rejects.toThrow('external XML');
+      await expect(validateImportedMpd(minimalMpd.replace('timescale="1"', 'timescale="1" media="segment-$Number$.m4s"'))).rejects.toThrow('original authorized manifest base URL');
     });
   });
 });

@@ -20,11 +20,55 @@ enum PartnerInviteStatus {
   DECLINED
 }
 
+enum MovieStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum MovieSourceType {
+  UPLOAD
+  STREAM
+  MANIFEST
+}
+
+enum StreamingFormat {
+  AUTO
+  DASH
+  HLS
+  MP4
+  WEBM
+}
+
+enum PlaybackMode {
+  IFRAME
+  DIRECT
+  SCREEN_SHARE
+  MANUAL
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum ViewerReadiness {
+  WAITING
+  LOADING
+  BUFFERING
+  READY
+  ERROR
+  DISCONNECTED
+}
+
 model User {
   id              String           @id @default(uuid())
   email           String           @unique
+  activeSessionId String?
   passwordHash    String
   displayName     String
+  role            UserRole         @default(USER)
   avatarUrl       String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -39,8 +83,46 @@ model User {
   hostedRooms     Room[]           @relation("HostedRooms")
   guestRooms      Room[]           @relation("GuestRooms")
   movieHistories  MovieHistory[]
+  movies          Movie[]
+  watchlist       UserWatchlist[]
+  watchProgress   WatchProgress[]
 
   @@index([email])
+}
+
+model UserWatchlist {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tmdbId      Int
+  title       String
+  posterUrl   String?
+  backdropUrl String?
+  overview    String?
+  releaseYear Int?
+  rating      Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, tmdbId])
+  @@index([userId, createdAt])
+}
+
+model WatchProgress {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tmdbId            Int
+  title             String
+  posterUrl         String?
+  backdropUrl       String?
+  positionSeconds   Float
+  durationSeconds   Float
+  completionPercent Float
+  lastWatchedAt     DateTime @updatedAt
+  createdAt         DateTime @default(now())
+
+  @@unique([userId, tmdbId])
+  @@index([userId, lastWatchedAt])
 }
 
 model PartnerInvite {
@@ -68,15 +150,70 @@ model Room {
   guestId             String?
   guest               User?           @relation("GuestRooms", fields: [guestId], references: [id])
   isHostOnlyControl   Boolean         @default(false)
+  catalogSelection    Json?
   currentMovieTitle   String?
+  playbackPosition    Float           @default(0)
+  playbackIsPlaying   Boolean         @default(false)
+  playbackUpdatedAt   DateTime?
+  playbackVersion     Int             @default(0)
+  playbackMode        PlaybackMode    @default(MANUAL)
+  screenSharingUserId String?
+  selectedMovieId     String?
+  selectedMovie       Movie?          @relation("SelectedRoomMovie", fields: [selectedMovieId], references: [id])
   createdAt           DateTime        @default(now())
   closedAt            DateTime?
 
   filesMetadata       RoomMovieMeta[]
+  viewerStates        RoomViewerState[]
   chatMessages        ChatMessage[]
   history             MovieHistory?
 
   @@index([code])
+  @@index([selectedMovieId])
+}
+
+model Movie {
+  id               String      @id @default(uuid())
+  ownerId          String
+  owner            User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title            String
+  originalFilename String
+  storageKey       String      @unique
+  mimeType         String
+  fileSize         BigInt
+  status           MovieStatus @default(UPLOADING)
+  sourceType       MovieSourceType @default(UPLOAD)
+  streamingUrl     String?
+  streamingFormat  StreamingFormat?
+  manifestBaseUrl  String?
+  description      String?
+  durationSeconds  Float?
+  posterKey        String?
+  posterUrl        String?
+  multipartUploadId String?
+  tmdbId            Int?
+  providerId        String?
+  providerSourceId  String?
+  licenseUrl        String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  parts            MovieUploadPart[]
+  selectedByRooms  Room[]      @relation("SelectedRoomMovie")
+
+  @@index([ownerId, status])
+  @@index([sourceType, status])
+  @@index([tmdbId])
+  @@index([providerId, providerSourceId])
+}
+
+model MovieUploadPart {
+  id         String @id @default(uuid())
+  movieId    String
+  movie      Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  partNumber Int
+  eTag       String
+
+  @@unique([movieId, partNumber])
 }
 
 model RoomMovieMeta {
@@ -88,9 +225,26 @@ model RoomMovieMeta {
   durationSeconds Float
   fileSizeBytes   BigInt?
   isReady         Boolean  @default(false)
+  mediaPath       String?
+  mimeType        String?
   updatedAt       DateTime @updatedAt
 
   @@unique([roomId, userId])
+}
+
+// This is deliberately separate from the legacy local-file metadata.  A cloud
+// movie is shared by id, while readiness is a property of each device/player.
+model RoomViewerState {
+  id              String          @id @default(uuid())
+  roomId          String
+  room            Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId          String
+  selectedMovieId String
+  state           ViewerReadiness @default(WAITING)
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([roomId, userId])
+  @@index([roomId, selectedMovieId])
 }
 
 model ChatMessage {

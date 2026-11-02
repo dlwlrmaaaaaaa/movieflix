@@ -19,3 +19,10 @@ export function generateInviteCode(): string {
   }
   return result;
 }
+
+export function validatedRoomCode(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('A valid room code is required.');
+  const code = value.trim().toUpperCase();
+  if (!/^TF-[2-9A-HJ-NP-Z]{4}$/.test(code)) throw new Error('Invalid room code. Expected TF- followed by four letters or digits.');
+  return code;
+}

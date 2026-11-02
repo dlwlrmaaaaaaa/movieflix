@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
+import { startAuthSession } from './authSession.service';
 import { prisma } from '../prisma';
 import { generateToken } from '../utils/token';
 import { generateInviteCode } from '../utils/roomCode';
+import { ENV } from '../config/env';
 import { UserProfile, AuthTokens } from '@togetherflix/shared';
 
 export class AuthService {
@@ -22,10 +24,13 @@ export class AuthService {
         email: email.toLowerCase().trim(),
         passwordHash,
         displayName: displayName.trim(),
+        // Bootstrap is server-configured; clients cannot choose a role.
+        role: ENV.ADMIN_BOOTSTRAP_EMAIL === email.toLowerCase().trim() ? 'ADMIN' : 'USER',
       },
     });
 
-    const accessToken = generateToken({ userId: user.id, email: user.email });
+    const sessionId = await startAuthSession(user.id);
+    const accessToken = generateToken({ userId: user.id, email: user.email, sessionId });
 
     return {
       accessToken,
@@ -37,6 +42,7 @@ export class AuthService {
         partnerId: null,
         partner: null,
         createdAt: user.createdAt.toISOString(),
+        role: user.role,
       },
     };
   }
@@ -64,7 +70,8 @@ export class AuthService {
       throw new Error('Invalid email or password.');
     }
 
-    const accessToken = generateToken({ userId: user.id, email: user.email });
+    const sessionId = await startAuthSession(user.id);
+    const accessToken = generateToken({ userId: user.id, email: user.email, sessionId });
 
     return {
       accessToken,
@@ -76,6 +83,7 @@ export class AuthService {
         partnerId: user.partnerId,
         partner: user.partner,
         createdAt: user.createdAt.toISOString(),
+        role: user.role,
       },
     };
   }
@@ -106,6 +114,7 @@ export class AuthService {
       partnerId: user.partnerId,
       partner: user.partner,
       createdAt: user.createdAt.toISOString(),
+      role: user.role,
     };
   }
 

@@ -15,3 +15,11 @@ export const roomRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const movieDiscoveryRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 120,
+  message: { success: false, message: 'Too many movie discovery requests. Please try again shortly.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

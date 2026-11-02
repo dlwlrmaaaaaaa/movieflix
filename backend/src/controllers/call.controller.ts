@@ -8,7 +8,7 @@ export class CallController {
     try {
       const { roomCode } = req.params;
       const room = await RoomService.getRoomByCode(roomCode);
-      if (!room) {
+      if (!room || room.status === 'ENDED') {
         res.status(404).json({ success: false, message: 'Room not found.' });
         return;
       }
@@ -23,8 +23,9 @@ export class CallController {
       const livekitRoomName = `tf-${room.code.toLowerCase()}`;
       const tokenData = await LiveKitService.createToken(
         livekitRoomName,
-        req.user!.id,
-        req.user!.displayName
+        req.sessionId ? `${req.user!.id}:${req.sessionId}` : req.user!.id,
+        req.user!.displayName,
+        room.hostId === req.user!.id,
       );
 
       res.status(200).json({ success: true, ...tokenData });

@@ -7,6 +7,7 @@ const router = Router();
 
 router.post('/register', authRateLimiter, AuthController.register);
 router.post('/login', authRateLimiter, AuthController.login);
+router.post('/logout', authMiddleware, AuthController.logout);
 router.get('/me', authMiddleware, AuthController.getMe);
 
 // Partner invitations
