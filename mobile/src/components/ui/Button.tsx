@@ -43,9 +43,9 @@ export function Button({
           backgroundColor: colors.primary,
           shadowColor: colors.primary,
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
+          shadowOpacity: 0,
           shadowRadius: 10,
-          elevation: 5,
+          elevation: 0,
         };
       case 'secondary':
         return {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, typography, spacing } from '../../src/theme';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
@@ -10,6 +10,7 @@ import { Sparkles } from 'lucide-react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { partyCode } = useLocalSearchParams<{ partyCode?: string }>();
   const { register } = useAuth();
 
   const [displayName, setDisplayName] = useState('');
@@ -33,7 +34,7 @@ export default function RegisterScreen() {
       setLoading(true);
       setError(null);
       await register(email, password, displayName);
-      router.replace('/(main)/home');
+      router.replace(partyCode ? `/party/${encodeURIComponent(partyCode)}` as any : '/(main)/home');
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
     } finally {
@@ -89,7 +90,7 @@ export default function RegisterScreen() {
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Already have an account?</Text>
-          <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
+          <TouchableOpacity onPress={() => router.replace(partyCode ? `/(auth)/login?partyCode=${encodeURIComponent(partyCode)}` as any : '/(auth)/login')}>
             <Text style={styles.footerLink}> Sign In</Text>
           </TouchableOpacity>
         </View>

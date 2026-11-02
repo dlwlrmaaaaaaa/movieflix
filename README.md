@@ -2,6 +2,13 @@
 
 > **A Private, Synchronized Movie Night App for Long-Distance Relationship (LDR) Couples**
 
+For AnnahFlix's free public deployment setup, use
+[`PRODUCTION_DEPLOYMENT.md`](./PRODUCTION_DEPLOYMENT.md) and the root
+[`render.yaml`](./render.yaml) Blueprint.
+
+Screen-share watch-party setup and browser limitations are documented in
+[`SCREEN_SHARE_WATCH_PARTY.md`](./SCREEN_SHARE_WATCH_PARTY.md).
+
 TogetherFlix lets you and your partner watch your locally downloaded movies in perfect sync while talking over an integrated voice or video call. No file uploading to servers, zero streaming buffering, and total privacy.
 
 ---
@@ -51,6 +58,8 @@ APP MOVIE/
 ---
 
 ## 🚀 Quick Start Guide
+
+For the TMDB catalog, verified Internet Archive playback, and native screen-sharing setup, see [MOVIE_DISCOVERY_AND_SCREEN_SHARING.md](./MOVIE_DISCOVERY_AND_SCREEN_SHARING.md).
 
 ### 1. Prerequisites
 - **Node.js**: v20 or v24

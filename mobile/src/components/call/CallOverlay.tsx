@@ -44,12 +44,15 @@ export function CallOverlay() {
           style={[styles.callBtn, isMuted && styles.callBtnActive]}
           onPress={toggleMute}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={isMuted ? 'Unmute microphone' : 'Mute microphone'}
         >
           {isMuted ? (
             <MicOff size={16} color={colors.danger} />
           ) : (
             <Mic size={16} color={colors.text} />
           )}
+          <Text style={[styles.callLabel, isMuted && styles.mutedLabel]}>{isMuted ? 'Unmute' : 'Mute'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -137,6 +140,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  callLabel: {
+    fontSize: 8,
+    color: colors.text,
+    marginTop: -2,
+  },
+  mutedLabel: { color: colors.danger },
   callBtnActive: {
     backgroundColor: colors.surfaceElevated,
   },

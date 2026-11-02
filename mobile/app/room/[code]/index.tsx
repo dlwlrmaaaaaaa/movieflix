@@ -1,3 +1,5 @@
+import { useRoomSession } from '../../../src/hooks/useRoomSession';
+import { WatchPartyRoom } from '../../../src/components/movie/WatchPartyRoom';
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -6,6 +8,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Share,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, typography, spacing } from '../../../src/theme';
@@ -14,11 +18,13 @@ import { Card } from '../../../src/components/ui/Card';
 import { Button } from '../../../src/components/ui/Button';
 import { Badge } from '../../../src/components/ui/Badge';
 import { CompatibilityCard } from '../../../src/components/couple/CompatibilityCard';
+import { MovieLibraryCard } from '../../../src/components/movie/MovieLibraryCard';
 import { CountdownOverlay } from '../../../src/components/couple/CountdownOverlay';
 import { useRoom } from '../../../src/context/RoomContext';
 import { useAuth } from '../../../src/context/AuthContext';
 import { usePlaybackSync } from '../../../src/context/PlaybackSyncContext';
 import { useCall } from '../../../src/context/CallContext';
+import { useSocket } from '../../../src/context/SocketContext';
 import { useVideoPicker } from '../../../src/hooks/useVideoPicker';
 import {
   Share2,
@@ -28,9 +34,11 @@ import {
   User,
   Heart,
   PhoneCall,
+  MonitorUp,
+  MonitorOff,
 } from 'lucide-react-native';
 
-export default function RoomWaitingScreen() {
+function RoomWaitingScreen() {
   const router = useRouter();
   const { code } = useLocalSearchParams<{ code: string }>();
   const { user } = useAuth();
@@ -41,43 +49,67 @@ export default function RoomWaitingScreen() {
     selectedMovie,
     compatibility,
     isReady,
-    selectLocalMovie,
+    selectCloudMovie,
     toggleReady,
     leaveRoom,
   } = useRoom();
 
-  const { isCountingDown } = usePlaybackSync();
-  const { joinCall, isCallActive } = useCall();
-  const { pickVideo, isPicking, error: pickerError } = useVideoPicker();
+  const { isCountingDown, isPlaying } = usePlaybackSync();
+  const { socket } = useSocket();
+  const { joinCall, leaveCall, isCallActive, isConnecting, connectionState, callError, isScreenSharing, startScreenShare, stopScreenShare } = useCall();
+  const [screenError, setScreenError] = useState('');
+  // The old picker branch remains reachable only for a guest's room-status
+  // rendering; uploads now live exclusively in MovieLibraryCard.
+  const handlePickMovie = async () => undefined;
+  const isPicking = false;
+  const pickerError: string | null = null;
 
-  // Navigate to player when countdown starts
+  // Selecting a movie must not force either participant into the player. The
+  // host/guest explicitly open it after marking ready; this is only a safety
+  // path for a guest who was still on this screen when playback started.
   useEffect(() => {
-    if (isCountingDown) {
+    if (isCountingDown || (!isHost && ((isPlaying && selectedMovie) || room?.playbackMode === 'SCREEN_SHARE'))) {
       router.replace(`/room/${code}/player`);
     }
-  }, [isCountingDown, code]);
+  }, [isCountingDown, isPlaying, isHost, selectedMovie, room?.playbackMode, code]);
 
   const handleShareCode = async () => {
     try {
+      const publicBaseUrl = (process.env.EXPO_PUBLIC_API_URL || '').replace(/\/$/, '');
+      const invitationUrl = publicBaseUrl ? `${publicBaseUrl}/party/${encodeURIComponent(code || '')}` : `togetherflix://party/${encodeURIComponent(code || '')}`;
       await Share.share({
-        message: `Join my movie night on TogetherFlix! Use room code: ${code} 💕`,
+        message: `Join my movie night on AnnahFlix! ${invitationUrl}\nRoom code: ${code}`,
       });
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handlePickMovie = async () => {
-    const file = await pickVideo();
-    if (file) {
-      selectLocalMovie(file);
+  const handleStartCall = async () => {
+    if (!isCallActive && code) {
+      try { await joinCall(code); } catch (error: any) { setScreenError(error.message || 'Unable to connect to the room.'); }
     }
   };
 
-  const handleStartCall = async () => {
-    if (!isCallActive && code) {
-      await joinCall(code);
+  const handleScreenShare = async () => {
+    if (!code || !isHost) return;
+    if (!isCallActive) {
+      setScreenError('Connect the room call first, then press Start Screen Share so the browser can request capture from that click.');
+      return;
     }
+    try {
+      setScreenError('');
+      await startScreenShare(code);
+      socket?.emit('screen:start', { roomCode: code });
+      router.push(`/room/${code}/player`);
+    } catch (e: any) {
+      setScreenError(e.message || 'Screen sharing is unavailable.');
+    }
+  };
+
+  const handleStopScreenShare = async () => {
+    await stopScreenShare();
+    if (code) socket?.emit('screen:stop', { roomCode: code });
   };
 
   function formatDuration(sec: number): string {
@@ -94,6 +126,7 @@ export default function RoomWaitingScreen() {
         subtitle={`Room: ${code}`}
         showBack
         onBack={async () => {
+          await leaveCall();
           await leaveRoom();
           router.replace('/(main)/home');
         }}
@@ -146,16 +179,23 @@ export default function RoomWaitingScreen() {
               label={partner?.isReady ? 'Ready! 💕' : partner ? 'Selecting' : 'Offline'}
               variant={partner?.isReady ? 'success' : partner ? 'warning' : 'neutral'}
             />
+            {partner?.metadata ? (
+              <Text style={styles.partnerMovie} numberOfLines={2}>
+                Selected: {partner.metadata.fileName}
+              </Text>
+            ) : null}
           </Card>
         </View>
 
         {/* Call Connect Button */}
         {!isCallActive ? (
           <Button
-            title="Start Voice / Video Call"
+            title={isConnecting ? 'Connecting voice call…' : 'Start Voice / Video Call'}
             variant="secondary"
             icon={<PhoneCall size={18} color={colors.text} />}
             onPress={handleStartCall}
+            loading={isConnecting}
+            disabled={isConnecting}
           />
         ) : (
           <View style={styles.callActiveNotice}>
@@ -163,15 +203,44 @@ export default function RoomWaitingScreen() {
             <Text style={styles.callActiveText}>Voice/Video Call Connected 🎙️</Text>
           </View>
         )}
+        {!isCallActive && callError ? (
+          <Text style={styles.errorText}>{connectionState === 'failed' ? callError : 'Call disconnected. You can try again.'}</Text>
+        ) : null}
 
-        {/* Local Video Selection Box */}
+        {isHost ? (
+          <View style={styles.screenShareSection}>
+            <Button
+              title={isScreenSharing ? 'Stop Screen Sharing' : isCallActive ? 'Start Screen Share' : 'Connect Call to Share'}
+              variant="secondary"
+              icon={isScreenSharing ? <MonitorOff size={18} color={colors.text} /> : <MonitorUp size={18} color={colors.text} />}
+              onPress={isScreenSharing ? handleStopScreenShare : handleScreenShare}
+              disabled={!isScreenSharing && !isCallActive}
+            />
+            <Text style={styles.screenShareHelp}>{Platform.OS === 'web' ? 'Choose the movie tab and enable “Share tab audio” in the browser picker.' : 'Screen audio capture depends on your device and the selected app.'}</Text>
+          </View>
+        ) : room?.playbackMode === 'SCREEN_SHARE' ? (
+          <Button title="Open Shared Screen" icon={<MonitorUp size={18} color={colors.text} />} onPress={() => router.push(`/room/${code}/player`)} />
+        ) : null}
+        {screenError ? <Text style={styles.errorText}>{screenError}</Text> : null}
+
+        {/* Host-owned movie selection / guest stream status */}
+        {isHost ? (
+          <MovieLibraryCard onSelect={selectCloudMovie} isAdmin={user?.role === 'ADMIN'} />
+        ) : (
         <Card style={styles.selectionCard}>
           <View style={styles.selectionHeader}>
             <Film size={22} color={colors.primary} />
-            <Text style={styles.selectionTitle}>Your Local Movie File</Text>
+            <Text style={styles.selectionTitle}>{isHost ? 'Your Local Movie File' : 'Room Movie'}</Text>
           </View>
 
-          {selectedMovie ? (
+          {!isHost ? (
+            room?.selectedMovie ? (
+              <View style={styles.selectedBox}>
+                <Text style={styles.fileName}>{room.selectedMovie.title}</Text>
+                <Text style={styles.pickDesc}>Selected by {partner?.displayName || 'the host'}.</Text>
+              </View>
+            ) : <Text style={styles.pickDesc}>Waiting for the host to select and upload a movie…</Text>
+          ) : selectedMovie ? (
             <View style={styles.selectedBox}>
               <Text style={styles.fileName}>{selectedMovie.name}</Text>
               <View style={styles.metaRow}>
@@ -211,6 +280,7 @@ export default function RoomWaitingScreen() {
             <Text style={styles.errorText}>{pickerError}</Text>
           ) : null}
         </Card>
+        )}
 
         {/* Compatibility Report */}
         {compatibility ? (
@@ -220,12 +290,29 @@ export default function RoomWaitingScreen() {
         {/* Readiness Action */}
         {selectedMovie ? (
           <View style={styles.readySection}>
+            {isHost ? (
+              <Button
+                title="Open Player & Start Watching"
+                variant="primary"
+                size="lg"
+                onPress={() => router.push(`/room/${code}/player`)}
+              />
+            ) : null}
             <Button
               title={isReady ? 'Cancel Ready' : "I'm Ready! Let's Watch 💕"}
               variant={isReady ? 'secondary' : 'primary'}
               size="lg"
               onPress={() => toggleReady(!isReady)}
             />
+            {!isHost ? (
+              <Button
+                title="Open Player"
+                variant="secondary"
+                size="lg"
+                onPress={() => router.push(`/room/${code}/player`)}
+                disabled={!isReady}
+              />
+            ) : null}
             {isReady && !partner?.isReady ? (
               <Text style={styles.waitingNotice}>
                 Waiting for {partner?.displayName || 'your partner'} to hit Ready...
@@ -258,6 +345,8 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.lg,
   },
+  screenShareSection: { gap: spacing.sm },
+  screenShareHelp: { color: colors.textMuted, fontSize: typography.size.xs, textAlign: 'center' },
   codeCard: {
     alignItems: 'center',
     paddingVertical: spacing.xl,
@@ -306,6 +395,13 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontWeight: typography.weight.semibold,
     color: colors.text,
+  },
+  partnerMovie: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: spacing.xs,
   },
   callActiveNotice: {
     flexDirection: 'row',
@@ -390,3 +486,14 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+
+export default function RoomRoute() {
+  const { code: value } = useLocalSearchParams<{ code: string }>();
+  const code = String(value || '').trim().toUpperCase();
+  const { loading, error } = useRoomSession(code);
+  const { room } = useRoom();
+  const router = useRouter();
+  if (error) return <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}><Text style={{ color: colors.danger }}>{error}</Text><TouchableOpacity onPress={() => router.replace('/join' as any)}><Text style={{ color: colors.primary }}>Back to Join Party</Text></TouchableOpacity></View>;
+  if (loading) return <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', gap: 16 }}><ActivityIndicator color={colors.primary} /><Text style={{ color: colors.textSecondary }}>Connecting to your movie night?</Text></View>;
+  return room?.catalogSelection ? <WatchPartyRoom /> : <RoomWaitingScreen />;
+}

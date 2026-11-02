@@ -31,7 +31,8 @@ export function PlayerControls({
   onOpenReactions,
 }: PlayerControlsProps) {
   const { isPlaying, position, duration, driftSeconds, play, pause, seek, requestResync } = usePlaybackSync();
-  const { isHost } = useRoom();
+  const { isHost, allViewersReady, viewerReadyCount } = useRoom();
+  const controlsEnabled = isHost && (isPlaying || allViewersReady);
 
   function formatTime(seconds: number): string {
     const s = Math.max(0, Math.floor(seconds));
@@ -89,6 +90,7 @@ export function PlayerControls({
         <TouchableOpacity
           style={styles.seekButton}
           onPress={() => seek(Math.max(0, position - 10))}
+          disabled={!controlsEnabled}
           activeOpacity={0.7}
         >
           <RotateCcw size={24} color={colors.text} />
@@ -98,6 +100,7 @@ export function PlayerControls({
         <TouchableOpacity
           style={styles.playPauseButton}
           onPress={isPlaying ? pause : play}
+          disabled={!controlsEnabled}
           activeOpacity={0.8}
         >
           {isPlaying ? (
@@ -110,12 +113,17 @@ export function PlayerControls({
         <TouchableOpacity
           style={styles.seekButton}
           onPress={() => seek(position + 10)}
+          disabled={!controlsEnabled}
           activeOpacity={0.7}
         >
           <RotateCw size={24} color={colors.text} />
           <Text style={styles.seekLabel}>10s</Text>
         </TouchableOpacity>
       </View>
+
+      {isHost && !isPlaying && !allViewersReady ? (
+        <Text style={styles.preparingText}>Preparing movie... {viewerReadyCount} of 2 viewers ready</Text>
+      ) : null}
 
       {/* Bottom Timeline & Floating Action Triggers */}
       <View style={styles.bottomBar}>
@@ -204,6 +212,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: spacing.xxl,
+  },
+  preparingText: {
+    color: colors.textSecondary,
+    fontSize: typography.size.xs,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
   seekButton: {
     alignItems: 'center',

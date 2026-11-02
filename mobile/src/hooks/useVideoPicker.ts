@@ -13,7 +13,9 @@ export function useVideoPicker() {
 
       const result = await DocumentPicker.getDocumentAsync({
         type: ['video/*'],
-        copyToCacheDirectory: false, // directly access file without duplicating multi-gigabyte file
+        // Persist a readable app-owned URI for the multipart uploader. The
+        // uploader reads one 8 MB part at a time, never the whole movie.
+        copyToCacheDirectory: true,
       });
 
       if (result.canceled || !result.assets || result.assets.length === 0) {

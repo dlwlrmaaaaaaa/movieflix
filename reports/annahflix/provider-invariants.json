@@ -1,0 +1,6 @@
+{
+  "backend/src/config/embedProviders.ts": "39636f8c0ea94fb9c9c50bc50f58fa284ec7d2ce6ea845a21f86787b74182094",
+  "backend/src/services/embedUrlBuilder.ts": "6c63a66f3e82ac9d9e3ba425b29710b6cad61e31a1e7734f4241e33092d4fd55",
+  "backend/src/services/embedProviderRegistry.ts": "049e670c7fd223dbdb3ec3f4701277af1825eed393ec765a7a51fc1e50089de3",
+  "backend/src/providers/ConfiguredEmbedProvider.ts": "b38968f546795eb2112d25a23cf9aa3a2822c55eb584c6bcec187d95d1a5310f"
+}

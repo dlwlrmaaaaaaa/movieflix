@@ -1,28 +1,28 @@
 export const colors = {
   // Cinematic Dark Backgrounds
-  background: '#0B0B0F',
-  surface: '#141420',
-  surfaceElevated: '#1D1D2E',
-  surfaceHighlight: '#282840',
+  background: '#080808',
+  surface: '#141414',
+  surfaceElevated: '#202020',
+  surfaceHighlight: '#292929',
 
-  // Romantic Velvet & Rose Accents
-  primary: '#FF4B72',          // Warm Rose Valentine
-  primaryHover: '#FF335E',
-  primaryGlow: 'rgba(255, 75, 114, 0.25)',
-  secondary: '#9D4EDD',        // Cosmic Violet
-  secondaryGlow: 'rgba(157, 78, 221, 0.25)',
-  accentPink: '#FF758F',
+  // AnnahFlix red and neutral accents
+  primary: '#E50914',          // AnnahFlix red
+  primaryHover: '#C90812',
+  primaryGlow: 'rgba(229, 9, 20, 0.16)',
+  secondary: '#D1D1D1',        // Secondary neutral
+  secondaryGlow: 'rgba(255, 255, 255, 0.08)',
+  accentPink: '#F15B62',
 
   // Structural & Borders
-  border: '#242438',
-  borderLight: '#32324D',
-  borderHighlight: '#FF4B72',
+  border: '#282828',
+  borderLight: '#3A3A3A',
+  borderHighlight: '#E50914',
 
   // Text Hierarchy
   text: '#FFFFFF',
-  textSecondary: '#A2A2BE',
-  textMuted: '#636380',
-  textInverse: '#0B0B0F',
+  textSecondary: '#A3A3A3',
+  textMuted: '#737373',
+  textInverse: '#080808',
 
   // Status & Feedback
   success: '#10B981',
@@ -34,6 +34,6 @@ export const colors = {
   info: '#3B82F6',
 
   // Overlays
-  overlay: 'rgba(11, 11, 15, 0.85)',
-  overlayGlass: 'rgba(20, 20, 32, 0.75)',
+  overlay: 'rgba(0, 0, 0, 0.85)',
+  overlayGlass: 'rgba(20, 20, 20, 0.85)',
 };

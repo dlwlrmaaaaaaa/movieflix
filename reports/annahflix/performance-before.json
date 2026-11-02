@@ -1,0 +1,117 @@
+{
+  "environment": "Edge headless, 1440x1000, local isolated API fixture with 24 movies per category; TMDB images replaced by fixed SVG responses; not live TMDB/CDN timings",
+  "runs": [
+    {
+      "firstContentMs": 636,
+      "initialApiRequests": 8,
+      "initialImageRequests": 97,
+      "returnToHomeApiRequests": 7,
+      "searchDebounceResponseMs": 483,
+      "scroll": {
+        "frames": 45,
+        "over32ms": 0,
+        "p95ms": 13.400000035762787
+      },
+      "apiRequests": [
+        "/api/movies/trending?page=1",
+        "/api/movies/popular?page=1",
+        "/api/movies/top-rated?page=1",
+        "/api/movies/upcoming?page=1",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/auth/me",
+        "/api/movies/550/stream",
+        "/api/movies/550",
+        "/api/movies/550/stream",
+        "/api/movies/550/embed?platform=web",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/movies/trending?page=1",
+        "/api/movies/popular?page=1",
+        "/api/movies/top-rated?page=1",
+        "/api/movies/upcoming?page=1",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/movies/550/stream",
+        "/api/movies/search?q=fixture&page=1"
+      ]
+    },
+    {
+      "firstContentMs": 468,
+      "initialApiRequests": 8,
+      "initialImageRequests": 97,
+      "returnToHomeApiRequests": 7,
+      "searchDebounceResponseMs": 481,
+      "scroll": {
+        "frames": 45,
+        "over32ms": 0,
+        "p95ms": 13.400000035762787
+      },
+      "apiRequests": [
+        "/api/movies/trending?page=1",
+        "/api/movies/popular?page=1",
+        "/api/movies/top-rated?page=1",
+        "/api/movies/upcoming?page=1",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/auth/me",
+        "/api/movies/550/stream",
+        "/api/movies/550",
+        "/api/movies/550/stream",
+        "/api/movies/550/embed?platform=web",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/movies/trending?page=1",
+        "/api/movies/popular?page=1",
+        "/api/movies/top-rated?page=1",
+        "/api/movies/upcoming?page=1",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/movies/550/stream",
+        "/api/movies/search?q=fixture&page=1"
+      ]
+    },
+    {
+      "firstContentMs": 481,
+      "initialApiRequests": 8,
+      "initialImageRequests": 97,
+      "returnToHomeApiRequests": 7,
+      "searchDebounceResponseMs": 471,
+      "scroll": {
+        "frames": 45,
+        "over32ms": 0,
+        "p95ms": 13.400000035762787
+      },
+      "apiRequests": [
+        "/api/movies/trending?page=1",
+        "/api/movies/popular?page=1",
+        "/api/movies/top-rated?page=1",
+        "/api/movies/upcoming?page=1",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/auth/me",
+        "/api/movies/550/stream",
+        "/api/movies/550",
+        "/api/movies/550/stream",
+        "/api/movies/550/embed?platform=web",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/movies/trending?page=1",
+        "/api/movies/popular?page=1",
+        "/api/movies/top-rated?page=1",
+        "/api/movies/upcoming?page=1",
+        "/api/users/watchlist",
+        "/api/users/continue-watching",
+        "/api/movies/550/stream",
+        "/api/movies/search?q=fixture&page=1"
+      ]
+    }
+  ],
+  "bundles": [
+    {
+      "file": "entry-74d4cca7eac0a4255ed5aaadf1003476.js",
+      "bytes": 3126939,
+      "gzipBytes": 604922
+    }
+  ]
+}

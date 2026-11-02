@@ -23,7 +23,7 @@ export default function WelcomeScreen() {
         <View style={styles.heartGlow}>
           <Heart size={44} color={colors.primary} fill={colors.primary} />
         </View>
-        <Text style={styles.brandTitle}>TogetherFlix</Text>
+        <Text style={styles.brandTitle}>AnnahFlix</Text>
         <Text style={styles.brandTagline}>Private Movie Nights for LDR Couples</Text>
       </View>
 

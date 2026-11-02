@@ -41,6 +41,24 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
 
   const lastHeartbeatTimeRef = useRef<number>(0);
   const rateResetTimerRef = useRef<any>(null);
+  const latestPositionRef = useRef<number>(0);
+  const latestVersionRef = useRef<number>(-1);
+  const scheduledStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hardCorrectionAtRef = useRef<number>(0);
+
+  // This provider stays mounted while navigating between rooms. Playback
+  // versions are scoped to a room/movie generation, so discard the previous
+  // room's version before accepting its successor's initial sync packet.
+  useEffect(() => {
+    latestVersionRef.current = -1;
+    latestPositionRef.current = 0;
+    if (scheduledStartTimerRef.current) clearTimeout(scheduledStartTimerRef.current);
+    scheduledStartTimerRef.current = null;
+    setIsPlaying(false);
+    setPosition(0);
+    setSeekTarget(null);
+    setPlaybackRate(1);
+  }, [room?.code, room?.selectedMovie?.id, room?.playbackMode]);
 
   useEffect(() => {
     if (!socket || !room) return;
@@ -72,17 +90,39 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
 
     // 2. Playback state updates (PLAY, PAUSE, SEEK)
     socket.on('playback:sync', (state: PlaybackState) => {
+      // Socket reconnects can replay a state packet. Versions are assigned by
+      // the server, so equal/older packets must not restart a settled player.
+      if (typeof state.version === 'number' && (state.version < latestVersionRef.current || (state.version === latestVersionRef.current && state.updatedBy !== 'SYSTEM_RESYNC'))) return;
+      if (typeof state.version === 'number') latestVersionRef.current = state.version;
       if (state.action === 'PLAY') {
-        const delay = state.scheduledStartTime
-          ? Math.max(0, state.scheduledStartTime - socketService.getEstimatedServerTime())
-          : 0;
+        // Seek while paused as soon as the schedule arrives. Waiting until the
+        // start timestamp to seek made the guest decode after the host had
+        // already begun playing.
+        if (scheduledStartTimerRef.current) clearTimeout(scheduledStartTimerRef.current);
+        const nowServer = socketService.getEstimatedServerTime();
+        const lateBySeconds = state.scheduledStartTime
+          ? Math.max(0, nowServer - state.scheduledStartTime) / 1000
+          : Math.max(0, nowServer - state.serverTime) / 1000;
+        const startPosition = state.position + lateBySeconds;
+        setSeekTarget(startPosition);
+        setPosition(startPosition);
+        setPlaybackRate(1.0);
 
-        setTimeout(() => {
-          setSeekTarget(state.position);
+        const delay = state.scheduledStartTime ? Math.max(0, state.scheduledStartTime - nowServer) : 0;
+        scheduledStartTimerRef.current = setTimeout(() => {
+          // A late packet starts at the currently expected authoritative
+          // position. Normal packets were already positioned while paused.
+          const delayedSeconds = state.scheduledStartTime
+            ? Math.max(0, socketService.getEstimatedServerTime() - state.scheduledStartTime) / 1000
+            : 0;
+          if (delayedSeconds > 0.15) setSeekTarget(state.position + delayedSeconds);
           setIsPlaying(true);
           setPlaybackRate(1.0);
+          scheduledStartTimerRef.current = null;
         }, delay);
       } else if (state.action === 'PAUSE') {
+        if (scheduledStartTimerRef.current) clearTimeout(scheduledStartTimerRef.current);
+        scheduledStartTimerRef.current = null;
         setIsPlaying(false);
         setSeekTarget(state.position);
         setPlaybackRate(1.0);
@@ -100,25 +140,31 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
       const elapsedSinceTickSec = Math.max(0, (nowServer - serverTime) / 1000);
       const expectedHostPos = hostPlaying ? hostPosition + elapsedSinceTickSec : hostPosition;
 
-      const drift = position - expectedHostPos;
+      const drift = latestPositionRef.current - expectedHostPos;
       const absDrift = Math.abs(drift);
       setDriftSeconds(absDrift);
+      if (process.env.NODE_ENV !== 'production') {
+        const { rttMs, offsetMs } = socketService.getNetworkMetrics();
+        console.log(`[Sync] local=${latestPositionRef.current.toFixed(3)} expected=${expectedHostPos.toFixed(3)} drift=${Math.round(drift * 1000)}ms rtt=${rttMs}ms offset=${Math.round(offsetMs)}ms`);
+      }
 
       // Drift threshold handling:
-      if (absDrift > 1.5) {
+      const now = Date.now();
+      if (absDrift > 0.5 && now - hardCorrectionAtRef.current >= 2000) {
         // Large discrepancy -> Snap seek
         console.log(`[Sync Drift Hard Correct] Drift: ${drift.toFixed(2)}s -> Seeking to ${expectedHostPos.toFixed(2)}s`);
         setSeekTarget(expectedHostPos);
         setPlaybackRate(1.0);
-      } else if (absDrift >= 0.35 && hostPlaying) {
+        hardCorrectionAtRef.current = now;
+      } else if (absDrift >= 0.15 && hostPlaying) {
         // Minor discrepancy -> Adaptive playback rate adjustment without audio distortion
-        const newRate = drift > 0 ? 0.95 : 1.05; // slow down if ahead, speed up if behind
+        const newRate = drift > 0 ? 0.97 : 1.03; // slow down if ahead, speed up if behind
         setPlaybackRate(newRate);
 
         if (rateResetTimerRef.current) clearTimeout(rateResetTimerRef.current);
         rateResetTimerRef.current = setTimeout(() => {
           setPlaybackRate(1.0);
-        }, 2000);
+        }, 1500);
       } else {
         // Imperceptible drift (< 350ms) -> Normal rate
         setPlaybackRate(1.0);
@@ -130,11 +176,12 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
       socket.off('playback:sync');
       socket.off('playback:heartbeat_tick');
       if (rateResetTimerRef.current) clearTimeout(rateResetTimerRef.current);
+      if (scheduledStartTimerRef.current) clearTimeout(scheduledStartTimerRef.current);
     };
-  }, [socket, room?.code, isHost, position]);
+  }, [socket, room?.code, isHost]);
 
   function play() {
-    if (!room || !socket) return;
+    if (!room || !socket || !isHost) return;
     socket.emit('playback:play', {
       roomCode: room.code,
       position,
@@ -143,7 +190,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
   }
 
   function pause() {
-    if (!room || !socket) return;
+    if (!room || !socket || !isHost) return;
     socket.emit('playback:pause', {
       roomCode: room.code,
       position,
@@ -151,7 +198,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
   }
 
   function seek(pos: number) {
-    if (!room || !socket) return;
+    if (!room || !socket || !isHost) return;
     setSeekTarget(pos);
     socket.emit('playback:seek', {
       roomCode: room.code,
@@ -160,11 +207,12 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
   }
 
   function updateLocalPosition(pos: number, dur?: number) {
+    latestPositionRef.current = pos;
     setPosition(pos);
     if (dur && dur > 0) setDuration(dur);
 
     // If host, send heartbeat every 2 seconds
-    if (isHost && room && socket) {
+    if (isHost && room?.playbackMode === 'DIRECT' && socket && isPlaying && !scheduledStartTimerRef.current) {
       const now = Date.now();
       if (now - lastHeartbeatTimeRef.current >= 2000) {
         lastHeartbeatTimeRef.current = now;

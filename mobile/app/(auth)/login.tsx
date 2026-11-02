@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { colors, typography, spacing } from '../../src/theme';
 import { Input } from '../../src/components/ui/Input';
 import { Button } from '../../src/components/ui/Button';
@@ -10,7 +10,8 @@ import { Heart } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { partyCode } = useLocalSearchParams<{ partyCode?: string }>();
+  const { login, sessionNotice } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,7 +28,7 @@ export default function LoginScreen() {
       setLoading(true);
       setError(null);
       await login(email, password);
-      router.replace('/(main)/home');
+      router.replace(partyCode ? `/party/${encodeURIComponent(partyCode)}` as any : '/(main)/home');
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -41,12 +42,12 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.iconContainer}>
           <Heart size={36} color={colors.primary} fill={colors.primary} />
-          <Text style={styles.subtitle}>Sign in to your TogetherFlix account</Text>
+          <Text style={styles.subtitle}>Sign in to your AnnahFlix account</Text>
         </View>
 
-        {error ? (
+        {error || sessionNotice ? (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorText}>{error || sessionNotice}</Text>
           </View>
         ) : null}
 
@@ -76,7 +77,7 @@ export default function LoginScreen() {
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>Don't have an account?</Text>
-          <TouchableOpacity onPress={() => router.replace('/(auth)/register')}>
+          <TouchableOpacity onPress={() => router.replace(partyCode ? `/(auth)/register?partyCode=${encodeURIComponent(partyCode)}` as any : '/(auth)/register')}>
             <Text style={styles.footerLink}> Register</Text>
           </TouchableOpacity>
         </View>

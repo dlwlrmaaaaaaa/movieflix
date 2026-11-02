@@ -1,6 +1,6 @@
-import dotenv from 'dotenv';
+import { loadBackendEnvironment } from '../../environment.cjs';
 import { validateProductionEnvironment } from './production';
-dotenv.config();
+loadBackendEnvironment();
 validateProductionEnvironment(process.env);
 
 export const ENV = {
