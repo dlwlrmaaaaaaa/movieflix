@@ -1,5 +1,32 @@
 # AnnahFlix: free public deployment
 
+## Mobile-only API deployment
+
+For Android without a website, deploy only the API. A separate
+`render.mobile.yaml` Blueprint provisions the API without a static site.
+Existing API services can keep their current build/start commands.
+
+After pushing this version of the code, clear both `CORS_ORIGIN` and
+`PUBLIC_WEB_URL` in Render's API Environment settings (delete the keys or set
+empty values), then save and redeploy. Do not enter `*`, `http://localhost`,
+`none`, or `null`. Provided values still require an HTTPS origin.
+
+Production accepts absent website settings. Empty `CORS_ORIGIN` disables
+browser CORS headers for HTTP and Socket.IO while native authenticated
+requests continue working. Empty `PUBLIC_WEB_URL` keeps invitation landing
+pages linked to the native app; users can also join with a room code.
+
+Keep `NODE_ENV=production`, both Neon database URLs, JWT, TMDB, and LiveKit
+settings configured. The Android build needs `EXPO_PUBLIC_API_URL` and
+`EXPO_PUBLIC_SOCKET_URL` pointing to the Render API; it does not need
+`EXPO_PUBLIC_WEB_URL`. Verify `/health/ready` after deployment.
+
+Mobile-only integration verification: `npm run test:neon -- --mobile-only`.
+This uses temporary test accounts against the configured Neon database and
+cleans up its test records and API subprocesses.
+
+The remaining sections cover the optional API-plus-website deployment.
+
 Use one Render Free Node web service for Express/Socket.IO, one Render static
 site for the Expo web export, and one Neon Free PostgreSQL database. Keep the
 existing LiveKit Cloud project for voice and optional screen sharing. This

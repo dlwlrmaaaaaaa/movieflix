@@ -45,7 +45,7 @@ export class SocketManager {
   constructor(server: HttpServer, corsOrigin: string) {
     this.io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
       cors: {
-        origin: corsOrigin === '*' ? true : corsOrigin,
+        origin: corsOrigin === '*' ? true : corsOrigin || false,
         methods: ['GET', 'POST'],
         credentials: true,
       },

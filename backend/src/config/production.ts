@@ -10,8 +10,12 @@ export function validateProductionEnvironment(env: Environment): void {
     if (!['postgresql:', 'postgres:'].includes(database.protocol) || !database.hostname) throw new Error();
   } catch { invalid.push('DATABASE_URL (PostgreSQL URL)'); }
   for (const key of ['CORS_ORIGIN', 'PUBLIC_WEB_URL']) {
+    // Native clients do not need a browser origin or a website redirect.
+    // When web support is configured, keep validating its HTTPS origin.
+    const value = env[key]?.trim();
+    if (!value) continue;
     try {
-      const url = new URL(env[key] || '');
+      const url = new URL(value);
       if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error();
     } catch { invalid.push(`${key} (HTTPS origin)`); }
   }

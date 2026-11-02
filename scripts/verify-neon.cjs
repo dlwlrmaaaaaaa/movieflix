@@ -8,16 +8,18 @@ const { randomUUID, randomBytes } = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
 const { loadBackendEnvironment } = require('../backend/environment.cjs');
 const dotenv = require('../backend/node_modules/dotenv');
-const { PrismaClient } = require('../backend/node_modules/@prisma/client');
 const { io } = require('../mobile/node_modules/socket.io-client');
 
 const root = path.resolve(__dirname, '..');
+const mobileOnly = process.argv.includes('--mobile-only');
 const envOption = process.argv.indexOf('--env');
 if (envOption !== -1) {
   if (!process.argv[envOption + 1]) throw new Error('--env requires a file.');
   Object.assign(process.env, dotenv.parse(fs.readFileSync(path.resolve(root, process.argv[envOption + 1]))));
 }
 loadBackendEnvironment();
+// Prisma 5 may auto-load backend/.env on import; initialize our env first.
+const { PrismaClient } = require('../backend/node_modules/@prisma/client');
 const dbUrl = new URL(process.env.DATABASE_URL || '');
 assert.ok(dbUrl.hostname.endsWith('.neon.tech'), 'This test requires a Neon database.');
 assert.ok(dbUrl.hostname.includes('-pooler.'), 'Application queries must use the Neon pooled endpoint.');
@@ -44,7 +46,7 @@ function sanitized(message) {
 }
 async function http(endpoint, { token, status = 200, body, method = 'GET' } = {}) {
   const response = await fetch(`${base}${endpoint}`, {
-    method, headers: { 'Content-Type': 'application/json', Origin: 'https://annahflix.example.test', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    method, headers: { 'Content-Type': 'application/json', ...(!mobileOnly ? { Origin: 'https://annahflix.example.test' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30000),
   });
   const data = await response.json();
@@ -62,7 +64,7 @@ async function start() {
   const port = await freePort(); base = `http://127.0.0.1:${port}`;
   child = spawn(process.execPath, ['deploy/start.mjs'], {
     cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, PORT: String(port), NODE_ENV: 'production', JWT_SECRET: verificationJwtSecret, CORS_ORIGIN: 'https://annahflix.example.test', PUBLIC_WEB_URL: 'https://annahflix.example.test', TRUST_PROXY_HOPS: '1', ALLOW_HTTP_STREAMS: 'false' },
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'production', JWT_SECRET: verificationJwtSecret, CORS_ORIGIN: mobileOnly ? '' : 'https://annahflix.example.test', PUBLIC_WEB_URL: mobileOnly ? '' : 'https://annahflix.example.test', TRUST_PROXY_HOPS: '1', ALLOW_HTTP_STREAMS: 'false' },
   });
   child.stdout.on('data', (data) => { logs += data; });
   child.stderr.on('data', (data) => { logs += data; });
@@ -112,6 +114,14 @@ async function connect(token, roomCode) {
     pass('registration and authenticated profile persist through Prisma/Postgres');
     const created = await http('/api/rooms', { method: 'POST', token: host.accessToken, status: 201, body: {} });
     const code = created.room.code; roomId = created.room.id;
+    if (mobileOnly) {
+      const browser = await fetch(`${base}/health`, { headers: { Origin: 'https://unconfigured.example.test' } });
+      assert.equal(browser.headers.get('access-control-allow-origin'), null);
+      const invitation = await fetch(`${base}/party/${code}`, { redirect: 'manual' });
+      assert.equal(invitation.status, 200);
+      assert.ok((await invitation.text()).includes(`togetherflix://party/${code}`));
+      pass('native requests work without website settings; browser CORS stays disabled and invitations use app deep links');
+    }
     await http('/api/rooms/join', { method: 'POST', token: guest.accessToken, body: { code } });
     const room = await db.room.findUniqueOrThrow({ where: { id: roomId } });
     assert.equal(room.guestId, guest.user.id);

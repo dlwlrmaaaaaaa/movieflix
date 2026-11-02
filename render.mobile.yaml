@@ -1,0 +1,40 @@
+# Mobile-only Blueprint: choose this file when creating a Render Blueprint.
+# The Android APK is built separately with EAS; no website is provisioned.
+services:
+  - type: web
+    name: annahflix-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: node deploy/build.mjs backend
+    startCommand: node deploy/start.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NODE_ENV
+        value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: ""
+      - key: PUBLIC_WEB_URL
+        value: ""
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: TMDB_ACCESS_TOKEN
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: ALLOW_HTTP_STREAMS
+        value: "false"

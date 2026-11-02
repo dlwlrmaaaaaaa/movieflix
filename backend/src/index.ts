@@ -25,7 +25,7 @@ app.use(helmet({
   crossOriginResourcePolicy: false,
 }));
 app.use(cors({
-  origin: ENV.CORS_ORIGIN === '*' ? true : ENV.CORS_ORIGIN,
+  origin: ENV.CORS_ORIGIN === '*' ? true : ENV.CORS_ORIGIN || false,
   credentials: true,
 }));
 // Imported DASH manifests are text and deliberately capped well below a video upload.

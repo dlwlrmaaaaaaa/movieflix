@@ -6,6 +6,9 @@ For AnnahFlix's free public deployment setup, use
 [`PRODUCTION_DEPLOYMENT.md`](./PRODUCTION_DEPLOYMENT.md) and the root
 [`render.yaml`](./render.yaml) Blueprint.
 
+The configured Neon production database and verified root commands are documented
+in [`NEON_SETUP.md`](./NEON_SETUP.md).
+
 Screen-share watch-party setup and browser limitations are documented in
 [`SCREEN_SHARE_WATCH_PARTY.md`](./SCREEN_SHARE_WATCH_PARTY.md).
 

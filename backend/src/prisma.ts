@@ -1,7 +1,7 @@
+// Prisma 5 loads its schema-adjacent .env during import. Load the app's
+// environment first so that legacy values cannot shadow Neon's pooled URL.
+import './config/env';
 import { PrismaClient } from '@prisma/client';
-import { loadBackendEnvironment } from '../environment.cjs';
-
-loadBackendEnvironment();
 
 const databaseUrl = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
 if (databaseUrl?.hostname.endsWith('.neon.tech')) {

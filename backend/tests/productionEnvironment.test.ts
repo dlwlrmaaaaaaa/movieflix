@@ -17,6 +17,15 @@ test('production accepts configured HTTPS deployment and local development stays
   validateProductionEnvironment({ NODE_ENV: 'development' });
 });
 
+test('mobile-only production starts without a website or browser origin', () => {
+  validateProductionEnvironment({ ...valid, CORS_ORIGIN: undefined, PUBLIC_WEB_URL: undefined });
+  validateProductionEnvironment({ ...valid, CORS_ORIGIN: '', PUBLIC_WEB_URL: '' });
+  validateProductionEnvironment({ ...valid, CORS_ORIGIN: '  ', PUBLIC_WEB_URL: '  ' });
+  // Either optional setting may be configured independently.
+  validateProductionEnvironment({ ...valid, CORS_ORIGIN: undefined });
+  validateProductionEnvironment({ ...valid, PUBLIC_WEB_URL: undefined });
+});
+
 test('production rejects unsafe defaults without exposing credential values', () => {
   for (const [key, value] of Object.entries({ JWT_SECRET: 'dev_only', CORS_ORIGIN: '*', PUBLIC_WEB_URL: 'http://example.test', TRUST_PROXY_HOPS: 'true', ALLOW_HTTP_STREAMS: 'true', DATABASE_URL: 'not-a-database' })) {
     assert.throws(() => validateProductionEnvironment({ ...valid, [key]: value }), (error: any) => {
