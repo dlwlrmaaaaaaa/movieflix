@@ -1,14 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-interface Props {
-  uri: string; initialPosition?: number; subtitleOverlay?: React.ReactNode;
-  onProgress: (position: number, duration: number) => void;
-  onPosition?: (position: number) => void; onTimeline?: (position: number, duration: number) => void;
-  onError?: (message: string) => void; onEnded?: () => void;
-}
-export function SoloVideoPlayer({ uri, initialPosition = 0, subtitleOverlay, ...callbacks }: Props) {
+import type { SoloVideoPlayerProps } from './SoloVideoPlayer';
+import { useWebSubtitleTracks } from '../../hooks/useWebSubtitleTracks';
+
+export function SoloVideoPlayer({ uri, initialPosition = 0, subtitleOverlay, nativeSubtitleId, onSubtitleTracks, ...callbacks }: SoloVideoPlayerProps) {
   const element = useRef<HTMLVideoElement | null>(null); const frame = useRef<View>(null);
+  useWebSubtitleTracks(element, uri, { nativeSubtitleId, onSubtitleTracks });
   const latest = useRef(callbacks); latest.current = callbacks;
   const [blocked, setBlocked] = useState(false);
   const sample = () => {

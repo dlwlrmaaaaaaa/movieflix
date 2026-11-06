@@ -5,7 +5,8 @@ import { prisma } from '../prisma';
 import { TmdbService, UpstreamServiceError } from './tmdb.service';
 import { MovieService } from './movie.service';
 import { RoomService } from './room.service';
-import { normalizeSubtitles, SUBTITLE_LANGUAGES } from './subtitle.service';
+import { normalizeSubtitles, validSubtitleLanguage } from './subtitle.service';
+import { importRemoteSubtitle } from './remoteSubtitle.service';
 import { validatedTmdbId, validatedSeason } from './embedUrlBuilder';
 
 const includeEpisode = { season: { include: { drama: true } }, sources: { where: { enabled: true }, include: { movie: true }, orderBy: { createdAt: 'desc' as const } } };
@@ -61,16 +62,16 @@ export class DramaService {
   }
   static async addSubtitle(id: string, input: any) {
     await this.episode(id);
-    if (!SUBTITLE_LANGUAGES.includes(input.language) || typeof input.label !== 'string' || !input.label.trim() || input.label.length > 80) throw new UpstreamServiceError('Invalid subtitle language or label.', 400);
-    const parsed = normalizeSubtitles(input.text);
+    if (!validSubtitleLanguage(input.language) || typeof input.label !== 'string' || !input.label.trim() || input.label.length > 80) throw new UpstreamServiceError('Invalid subtitle language or label.', 400);
+    const parsed = input.url === undefined ? normalizeSubtitles(input.text) : await importRemoteSubtitle(input.url);
     const normalized = { vtt: parsed.vtt, cues: parsed.cues as unknown as Prisma.InputJsonValue };
     return prisma.episodeSubtitle.upsert({ where: { episodeId_language: { episodeId: id, language: input.language } }, create: { episodeId: id, language: input.language, label: input.label, ...normalized }, update: { label: input.label, ...normalized } });
   }
-  static async playback(userId: string, id: string) {
+  static async playback(userId: string, id: string, includeSubtitles = true) {
     const episode = await this.episode(id); const source = readySource(episode);
     if (!source) throw new UpstreamServiceError('Episode unavailable. No playable source has been assigned.', 404);
     const playback = await MovieService.playback(userId, source.movieId);
-    return { episode: episodeSummary(episode), drama: dramaSummary(episode.season.drama), movieId: source.movieId, ...playback, subtitles: await this.subtitles(id) };
+    return { episode: episodeSummary(episode), drama: dramaSummary(episode.season.drama), movieId: source.movieId, ...playback, subtitles: includeSubtitles ? await this.subtitles(id).catch(() => []) : [] };
   }
   static async beginProgress(userId: string, id: string) {
     const episode = await this.episode(id);

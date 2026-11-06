@@ -1,6 +1,9 @@
 import type { SubtitleCue } from '@togetherflix/shared';
 
 export const SUBTITLE_LANGUAGES = ['en', 'fil', 'ko', 'zh-Hans', 'zh-Hant'] as const;
+export function validSubtitleLanguage(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/.test(value);
+}
 function timestamp(value: string): number {
   const match = /^(?:(\d{2,}):)?([0-5]\d):([0-5]\d)[.,](\d{3})$/.exec(value);
   if (!match) throw new Error('Invalid subtitle timestamp.');
@@ -16,7 +19,7 @@ function vttTime(value: number) {
 export function normalizeSubtitles(input: unknown): { vtt: string; cues: SubtitleCue[] } {
   if (typeof input !== 'string' || Buffer.byteLength(input, 'utf8') > 1024 * 1024 || input.includes('\uFFFD') || input.includes('\0')) throw new Error('Supply a valid UTF-8 subtitle file up to 1 MB.');
   const text = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim();
-  const blocks = text.replace(/^WEBVTT[^\n]*(?:\n|$)/, '').trim().split(/\n{2,}/);
+  const blocks = text.replace(/^WEBVTT[^\n]*(?:\n(?:Kind|Language):[^\n]*)*(?:\n|$)/i, '').trim().split(/\n{2,}/);
   const cues: SubtitleCue[] = [];
   for (const block of blocks) {
     if (!block.trim() || /^(NOTE|STYLE|REGION)(\s|$)/.test(block)) continue;

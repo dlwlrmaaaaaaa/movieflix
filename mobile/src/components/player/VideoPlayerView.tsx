@@ -3,9 +3,11 @@ import { View, Modal, Platform, StyleSheet, TouchableWithoutFeedback, TouchableO
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { usePlaybackSync } from '../../context/PlaybackSyncContext';
 import { useCall } from '../../context/CallContext';
+import { useNativeSubtitleTracks } from '../../hooks/useNativeSubtitleTracks';
+import type { SubtitlePlayerProps } from '../../services/subtitleTracks';
 import { useKeepAwake } from 'expo-keep-awake';
 
-export interface VideoPlayerViewProps {
+export interface VideoPlayerViewProps extends SubtitlePlayerProps {
   videoUri: string;
   subtitleOverlay?: React.ReactNode;
   onTimeline?: (position: number, duration: number) => void;
@@ -18,7 +20,7 @@ export interface VideoPlayerViewProps {
   fullscreenOverlay?: React.ReactNode;
 }
 
-export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay, subtitleOverlay, onTimeline, onEnded }: VideoPlayerViewProps) {
+export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay, subtitleOverlay, onTimeline, onEnded, nativeSubtitleId, onSubtitleTracks }: VideoPlayerViewProps) {
   // Keep phone screen awake during movie watching
   useKeepAwake();
 
@@ -55,6 +57,7 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
     p.volume = movieVolume;
   });
 
+  useNativeSubtitleTracks(player, videoUri, { nativeSubtitleId, onSubtitleTracks });
   playerRef.current = player;
 
   // Expo Video's readyToPlay state means the native player has enough buffered

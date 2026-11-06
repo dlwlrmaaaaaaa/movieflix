@@ -2,7 +2,7 @@
   "expo": {
     "name": "AnnahFlix",
     "slug": "togetherflix",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -55,7 +55,8 @@
           }
         }
       ],
-      "@config-plugins/react-native-webrtc"
+      "@config-plugins/react-native-webrtc",
+      "./plugins/withSubtitleTracks"
     ],
     "scheme": "togetherflix",
     "extra": {
@@ -69,7 +70,7 @@
     "owner": "devareajustins-team",
     "description": "A cinematic place for your movies, with a separate space for movie nights together.",
     "runtimeVersion": {
-      "policy": "fingerprint"
+      "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/9014f563-67ca-46b3-8073-4a9193fe9f62",

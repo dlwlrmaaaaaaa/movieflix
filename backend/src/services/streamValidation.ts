@@ -4,14 +4,20 @@ import { ENV } from '../config/env';
 
 export type StreamFormat = 'AUTO' | 'DASH' | 'HLS' | 'MP4' | 'WEBM';
 
-function isPrivateAddress(address: string): boolean {
+export function isPrivateAddress(address: string): boolean {
   if (net.isIP(address) === 6) {
     const normalized = address.toLowerCase();
-    return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+    if (normalized.startsWith('::ffff:')) {
+      const tail = normalized.slice(7);
+      if (net.isIP(tail) === 4) return isPrivateAddress(tail);
+      // Reject hexadecimal IPv4-mapped addresses rather than risk bypassing the IPv4 guard.
+      return true;
+    }
+    return normalized === '::' || normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || /^fe[89ab]/.test(normalized) || normalized.startsWith('ff');
   }
   const parts = address.split('.').map(Number);
   if (parts.length !== 4 || parts.some(Number.isNaN)) return true;
-  return parts[0] === 0 || parts[0] === 10 || parts[0] === 127 || parts[0] === 169 && parts[1] === 254 ||
+  return parts[0] === 0 || parts[0] === 10 || parts[0] === 127 || parts[0] >= 224 || parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127 || parts[0] === 169 && parts[1] === 254 ||
     parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31;
 }
 

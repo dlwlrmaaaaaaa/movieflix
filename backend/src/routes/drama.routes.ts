@@ -24,7 +24,7 @@ router.get('/', movieDiscoveryRateLimiter, handle(async (req, res) => {
 }));
 router.get('/continue', handle(async (req, res) => { res.json({ items: await DramaService.continueWatching(req.user!.id) }); }));
 router.get('/recent', handle(async (_req, res) => { res.json({ items: await DramaService.recent() }); }));
-router.get('/episodes/:id/playback', handle(async (req, res) => { res.json(await DramaService.playback(req.user!.id, req.params.id)); }));
+router.get('/episodes/:id/playback', handle(async (req, res) => { res.json(await DramaService.playback(req.user!.id, req.params.id, req.query.subtitles !== 'false')); }));
 router.post('/episodes/:id/progress-session', handle(async (req, res) => {
   const progress = await DramaService.beginProgress(req.user!.id, req.params.id);
   res.json({ sessionId: progress.sessionId, positionSeconds: progress.completed ? 0 : progress.positionSeconds });

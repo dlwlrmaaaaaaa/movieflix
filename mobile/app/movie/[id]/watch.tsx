@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { SoloVideoPlayer } from '../../../src/components/player/SoloVideoPlayer';
+import { useEpisodeSubtitles } from '../../../src/components/player/EpisodeSubtitles';
 import { api } from '../../../src/services/api';
 import { colors, spacing, typography } from '../../../src/theme';
 import { AuthorizedPlaybackSource, CloudMovie } from '@togetherflix/shared';
@@ -19,6 +20,7 @@ export default function SoloWatchScreen() {
   const [error, setError] = useState('');
   const [options, setOptions] = useState<Array<{ movie: CloudMovie; source: AuthorizedPlaybackSource }>>([]);
   const [sourceIndex, setSourceIndex] = useState(0);
+  const subtitles = useEpisodeSubtitles([], position.current, uri, { allowNative: Platform.OS === 'android' });
 
   useEffect(() => {
     if (!Number.isInteger(tmdbId) || tmdbId <= 0) { setError('Invalid movie.'); return; }
@@ -58,7 +60,8 @@ export default function SoloWatchScreen() {
       <TouchableOpacity onPress={() => router.back()} style={styles.icon}><ArrowLeft color={colors.text} size={22} /></TouchableOpacity>
       <Text style={styles.title} numberOfLines={1}>{title}</Text>
     </View>
-    <SoloVideoPlayer key={uri} uri={uri} initialPosition={position.current || initialPosition} onPosition={(value) => { position.current = value; }} onProgress={saveProgress} onError={handleSourceError} />
+    <SoloVideoPlayer {...subtitles.playerProps} subtitleOverlay={subtitles.overlay} key={uri} uri={uri} initialPosition={position.current || initialPosition} onPosition={(value) => { position.current = value; }} onProgress={saveProgress} onError={handleSourceError} />
+    {subtitles.controls}
     {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
   </SafeAreaView>;
 }

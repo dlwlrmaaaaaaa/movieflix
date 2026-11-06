@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { useNativeSubtitleTracks } from '../../hooks/useNativeSubtitleTracks';
+import type { SubtitlePlayerProps } from '../../services/subtitleTracks';
 import { useKeepAwake } from 'expo-keep-awake';
 
-interface Props {
+export interface SoloVideoPlayerProps extends SubtitlePlayerProps {
   uri: string;
   subtitleOverlay?: React.ReactNode;
   onTimeline?: (position: number, duration: number) => void;
@@ -14,7 +16,7 @@ interface Props {
   onError?: (message: string) => void;
 }
 
-export function SoloVideoPlayer({ uri, initialPosition = 0, onProgress, onPosition, onError, onTimeline, onEnded, subtitleOverlay }: Props) {
+export function SoloVideoPlayer({ uri, initialPosition = 0, onProgress, onPosition, onError, onTimeline, onEnded, subtitleOverlay, nativeSubtitleId, onSubtitleTracks }: SoloVideoPlayerProps) {
   useKeepAwake();
   const [fullscreen, setFullscreen] = useState(false);
   const callbacks = useRef({ onProgress, onPosition, onError, onTimeline, onEnded });
@@ -26,8 +28,10 @@ export function SoloVideoPlayer({ uri, initialPosition = 0, onProgress, onPositi
     instance.play();
   });
 
+  useNativeSubtitleTracks(player, uri, { nativeSubtitleId, onSubtitleTracks });
+
   useEffect(() => {
-    const listener = ((status: string, error?: { message?: string }) => {
+    const listener = ((status: string, _previous?: string, error?: { message?: string }) => {
       if (status === 'error') callbacks.current.onError?.(error?.message || 'Unable to play this movie.');
     }) as any;
     const subscription = player.addListener('statusChange', listener);

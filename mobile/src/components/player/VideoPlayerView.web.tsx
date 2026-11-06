@@ -2,13 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePlaybackSync } from '../../context/PlaybackSyncContext';
 import { useCall } from '../../context/CallContext';
+import { useWebSubtitleTracks } from '../../hooks/useWebSubtitleTracks';
 import type { VideoPlayerViewProps } from './VideoPlayerView';
 
 /** Use real media events; Expo Video 1.1's web adapter does not emit statusChange. */
-export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay, subtitleOverlay, onTimeline, onEnded }: VideoPlayerViewProps) {
+export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay, subtitleOverlay, onTimeline, onEnded, nativeSubtitleId, onSubtitleTracks }: VideoPlayerViewProps) {
   const { isPlaying, playbackRate, seekTarget, clearSeekTarget, updateLocalPosition, setBuffering } = usePlaybackSync();
   const { movieVolume } = useCall();
   const element = useRef<HTMLVideoElement | null>(null);
+  useWebSubtitleTracks(element, videoUri, { nativeSubtitleId, onSubtitleTracks });
   const frame = useRef<View>(null);
   const [ready, setReady] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);

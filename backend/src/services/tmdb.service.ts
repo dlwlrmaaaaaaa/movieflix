@@ -1,4 +1,6 @@
 import { DramaCategory, DramaDetails, DramaPage, DramaSummary } from '@togetherflix/shared';
+import { classifyTvContent, normalizeSearchQuery, uniqueContentResults } from '@togetherflix/shared';
+import type { ContentSearchFilters, ContentSearchPage, ContentSearchResult } from '@togetherflix/shared';
 import { MovieCatalogPage, TmdbMovieDetails, TmdbMovieSummary, TmdbTrailer } from '@togetherflix/shared';
 import { ENV } from '../config/env';
 import { RequestLimiter } from './requestLimiter';
@@ -57,8 +59,9 @@ function catalogPage(data: any): MovieCatalogPage {
 }
 
 export function classifyDrama(language: string, countries: string[]): DramaCategory {
-  if (language === 'ko' && countries.includes('KR')) return 'k-drama';
-  if (language === 'zh' && countries.includes('CN') && !countries.some((country) => country === 'TW' || country === 'HK')) return 'c-drama';
+  const category = classifyTvContent(language, countries);
+  if (category === 'kdrama') return 'k-drama';
+  if (category === 'cdrama') return 'c-drama';
   return 'tv';
 }
 function tvSummary(data: any): DramaSummary {
@@ -72,6 +75,61 @@ function tvSummary(data: any): DramaSummary {
 }
 
 export class TmdbService {
+  static async searchContent(rawQuery: unknown, rawPage: unknown, filters: ContentSearchFilters = {}): Promise<ContentSearchPage> {
+    if (typeof rawQuery !== 'string') throw new UpstreamServiceError('Enter a search title.', 400);
+    const query = normalizeSearchQuery(rawQuery);
+    const category = filters.category || 'all';
+    if (!['all', 'movie', 'tv', 'kdrama', 'cdrama'].includes(category)) throw new UpstreamServiceError('Invalid search category.', 400);
+    if (filters.year && !/^\d{4}$/.test(filters.year)) throw new UpstreamServiceError('Enter a four-digit year.', 400);
+    if (filters.country && !/^[A-Z]{2}$/.test(filters.country)) throw new UpstreamServiceError('Enter a two-letter country code.', 400);
+    if (filters.genre && !/^\d{1,6}$/.test(filters.genre)) throw new UpstreamServiceError('Invalid genre.', 400);
+    const page = pageNumber(rawPage);
+    const browsing = !query && Boolean(filters.year || filters.country || filters.genre);
+    if (!query && !browsing) return { results: [], page, nextPage: null };
+    if (!browsing && (query.length < 2 || query.length > 100)) throw new UpstreamServiceError('Search must contain 2 to 100 characters.', 400);
+    const results: ContentSearchResult[] = [];
+    let cursor = page;
+    let nextPage: number | null = null;
+    // Category filters use a bounded cursor over all upstream pages, rather than
+    // silently discarding everything after the first page of a general TV query.
+    for (let scanned = 0; scanned < 3; scanned++) {
+      const kind = category === 'movie' ? 'movie' : category === 'all' ? 'multi' : 'tv';
+      const batches: any[] = browsing ? await Promise.all((category === 'all' ? ['movie', 'tv'] : [kind]).map(async (mediaType) => {
+        const data: any = await this.request(`/discover/${mediaType}`, { page: cursor, include_adult: false, sort_by: 'popularity.desc', with_origin_country: category === 'kdrama' ? 'KR' : category === 'cdrama' ? 'CN' : filters.country, with_original_language: category === 'kdrama' ? 'ko' : category === 'cdrama' ? 'zh' : undefined, with_genres: filters.genre, ...(mediaType === 'movie' ? { primary_release_year: filters.year } : { first_air_date_year: filters.year }) });
+        return { ...data, results: (data.results || []).map((item: any) => ({ ...item, media_type: mediaType })) };
+      })) : [await this.request<any>(`/search/${kind}`, { query, page: cursor, include_adult: false })];
+      const data = { total_pages: Math.max(...batches.map((batch) => Number(batch.total_pages) || 1)), results: batches.flatMap((batch) => batch.results || []) };
+      // Movie search summaries often omit production origins. Only hydrate that
+      // metadata when the user explicitly requests a country filter; normal
+      // search never fetches details for every result. The shared limiter/cache
+      // bounds and deduplicates these requests.
+      if (filters.country && !browsing) await Promise.all(data.results.map(async (item: any) => {
+        const mediaType = kind === 'multi' ? item.media_type : kind;
+        if (mediaType !== 'movie' || !Number.isInteger(item.id) || item.id <= 0 || (Array.isArray(item.origin_country) && item.origin_country.length)) return;
+        const metadata: any = await this.request(`/movie/${item.id}`);
+        item.origin_country = Array.isArray(metadata.origin_country) && metadata.origin_country.length ? metadata.origin_country : (metadata.production_countries || []).map((country: any) => country.iso_3166_1);
+      }));
+      for (const item of Array.isArray(data.results) ? data.results : []) {
+        const mediaType = browsing || kind === 'multi' ? item.media_type : kind;
+        if (!['movie', 'tv'].includes(mediaType) || !Number.isInteger(item.id) || item.id <= 0) continue;
+        const countries = Array.isArray(item.origin_country) ? item.origin_country.filter((value: unknown) => typeof value === 'string') : [];
+        const language = typeof item.original_language === 'string' ? item.original_language : '';
+        const classified = mediaType === 'movie' ? 'movie' : classifyTvContent(language, countries);
+        const date = mediaType === 'movie' ? item.release_date : item.first_air_date;
+        const genreIds = Array.isArray(item.genre_ids) ? item.genre_ids.filter(Number.isInteger) : [];
+        if ((category === 'kdrama' || category === 'cdrama') && classified !== category) continue;
+        if (filters.country && !countries.includes(filters.country) && !(browsing && countries.length === 0 && category !== 'kdrama' && category !== 'cdrama')) continue;
+        if (filters.year && (typeof date !== 'string' || date.slice(0, 4) !== filters.year)) continue;
+        if (filters.genre && !genreIds.includes(Number(filters.genre))) continue;
+        results.push({ id: item.id, mediaType, category: classified, title: String(item.title || item.name || item.original_title || item.original_name || 'Untitled'), originalTitle: String(item.original_title || item.original_name || ''), posterUrl: imageUrl(item.poster_path, 'w500'), releaseDate: typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null, originalLanguage: language, originCountries: countries, genreIds, rating: Number(item.vote_average) || 0 });
+      }
+      nextPage = cursor < Math.min(Number(data.total_pages) || 1, 500) ? cursor + 1 : null;
+      if (!nextPage || results.length >= 20) break;
+      cursor = nextPage;
+    }
+    return { results: uniqueContentResults(results), page, nextPage };
+  }
+
   private static async request<T>(path: string, params: Record<string, string | number | boolean | undefined> = {}): Promise<T> {
     if (!ENV.TMDB_ACCESS_TOKEN && !ENV.TMDB_API_KEY) {
       throw new UpstreamServiceError('Movie discovery is not configured. Add TMDB_ACCESS_TOKEN or TMDB_API_KEY.', 503);

@@ -1,0 +1,81 @@
+const assert = require('node:assert/strict');
+const express = require('express');
+const http = require('node:http');
+const path = require('node:path');
+const os = require('node:os');
+const { chromium } = require(process.env.TF_PLAYWRIGHT_PATH || path.join(os.tmpdir(), 'togetherflix-ui-tools/node_modules/playwright'));
+const app = express();
+app.get('/__video.mp4', (_req, res) => res.sendFile(path.join(os.tmpdir(), 'togetherflix-test-flower.mp4')));
+app.use(express.static(path.resolve(__dirname, '../../mobile/dist')));
+app.get('*', (_req, res) => res.sendFile(path.resolve(__dirname, '../../mobile/dist/index.html')));
+const server = http.createServer(app);
+(async () => {
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+  const errors = []; const savedProgress = []; let attached = false;
+  const user = { id: 'fixture', email: 'fixture@example.test', displayName: 'Fixture', role: 'ADMIN', createdAt: new Date().toISOString() };
+  const drama = { tmdbId: 991234, title: 'Fixture Korean Drama', originalTitle: '드라마', category: 'k-drama', originalLanguage: 'ko', originCountry: ['KR'], posterUrl: null, backdropUrl: null, description: 'Fixture synopsis', year: 2026, rating: 8, genres: ['Drama'], numberOfSeasons: 2, cast: ['Fixture Actor'], seasons: [{ seasonNumber: 1, title: 'Season 1', episodeCount: 2 }, { seasonNumber: 2, title: 'Season 2', episodeCount: 1 }] };
+  const episode = (n, available = true) => ({ id: `episode-${n}`, dramaId: 'drama', seasonId: 'season', seasonNumber: 1, episodeNumber: n, title: `Episode ${n}`, description: 'Episode synopsis', runtime: 1, thumbnailUrl: null, airDate: null, available, watched: false });
+  const subtitles = [{ id: 'subtitle', language: 'en', label: 'English', cues: [{ start: 0, end: 60, text: 'Fixture subtitle' }] }];
+  const movie = { id: 'source', title: 'Validated episode source', status: 'READY', sourceType: 'STREAM', streamingFormat: 'MP4', fileSize: 0 };
+  try {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await context.routeWebSocket('**/socket.io/**', (socket) => socket.close());
+    await context.addInitScript((profile) => { localStorage.setItem('@togetherflix_access_token', 'fixture'); localStorage.setItem('@togetherflix_user_profile', JSON.stringify(profile)); }, user);
+    await context.route('**/*', async (route) => {
+      const url = new URL(route.request().url()); const p = url.pathname;
+      if (!p.startsWith('/api/')) { if (url.origin === base) return route.continue(); return route.abort(); }
+      const ok = (body) => route.fulfill({ json: body });
+      if (p === '/api/auth/me') return ok({ success: true, user });
+      if (p === '/api/dramas') return ok({ page: 1, totalPages: 1, totalResults: 1, results: [drama] });
+      if (p === '/api/dramas/991234') return ok({ drama });
+      if (p.endsWith('/seasons/1')) return ok({ episodes: [episode(1), episode(2, false)] });
+      if (p.endsWith('/seasons/2')) return ok({ episodes: [] });
+      if (p === '/api/dramas/continue') return ok({ items: [{ drama, episode: episode(1), positionSeconds: 1, durationSeconds: 60, completed: false }] });
+      if (p === '/api/dramas/recent') return ok({ items: [{ drama, episode: episode(1) }] });
+      if (p.endsWith('/subtitles')) return ok({ subtitles });
+      if (p.endsWith('/progress-session')) return ok({ sessionId: 'session', positionSeconds: 1 });
+      if (p.endsWith('/progress')) { savedProgress.push(route.request().postDataJSON()); return ok({ accepted: true }); }
+      if (p.endsWith('/playback')) return ok({ drama, episode: episode(1), movieId: 'source', playbackUrl: `${base}/__video.mp4`, expiresInSeconds: null, subtitles });
+      if (p.endsWith('/next')) return ok({ episode: episode(2) });
+      if (p.endsWith('/source')) { attached = true; return ok({ success: true }); }
+      if (p === '/api/movies') return ok({ success: true, movies: [movie] });
+      if (p.startsWith('/api/movies/')) return ok({ success: true, page: 1, totalPages: 1, totalResults: 1, results: [{ id: 550, title: 'Existing Movie', originalTitle: 'Existing Movie', overview: '', posterUrl: null, backdropUrl: null, genreIds: [18], rating: 8, releaseYear: 2026 }] });
+      return ok({ success: true, items: [], messages: [] });
+    });
+    const page = await context.newPage(); page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(`${base}/home?view=k-drama`);
+    await page.getByText('Korean Dramas', { exact: true }).waitFor();
+    await page.getByText('Fixture Korean Drama', { exact: true }).first().click();
+    await page.waitForURL(/\/drama\/991234$/);
+    await page.getByText('Fixture synopsis', { exact: true }).waitFor();
+    await page.getByText('Episode unavailable', { exact: true }).waitFor();
+    await page.getByText('Season 2', { exact: true }).click();
+    await page.getByText('No episodes found for this season.', { exact: true }).waitFor();
+    await page.getByText('Season 1', { exact: true }).click();
+    await page.getByText('Manage episode source & subtitles', { exact: true }).first().click();
+    await page.getByText('Select', { exact: true }).first().click();
+    await page.getByText('Saved.', { exact: true }).waitFor(); assert(attached);
+    await page.screenshot({ path: path.join(os.tmpdir(), 'annahflix-drama-details-mobile.png'), fullPage: true });
+    await page.getByText('Watch Now', { exact: true }).first().click();
+    await page.waitForURL(/\/episode\/episode-1$/);
+    await page.locator('video').waitFor();
+    await page.waitForFunction(() => document.querySelector('video')?.currentTime > 1);
+    await page.getByText('Fixture subtitle', { exact: true }).waitFor();
+    await page.getByText('Off', { exact: true }).click();
+    await page.getByText('Fixture subtitle', { exact: true }).waitFor({ state: 'hidden' });
+    await page.getByText('English', { exact: true }).click();
+    await page.getByText('+0.5s', { exact: true }).click();
+    await page.getByText('0.5s', { exact: true }).waitFor();
+    await page.locator('video').evaluate((video) => video.pause());
+    await page.waitForFunction(() => document.querySelector('video')?.paused);
+    assert.equal(await page.locator('video').count(), 1);
+    assert(savedProgress.some((progress) => progress.positionSeconds > 1));
+    await page.screenshot({ path: path.join(os.tmpdir(), 'annahflix-episode-player-mobile.png'), fullPage: true });
+    await page.goto(`${base}/home?view=movies`);
+    await page.getByText('Existing Movie', { exact: true }).first().waitFor();
+    assert.deepEqual(errors, []);
+    console.log('Browser checks passed: discovery navigation, season switching, unavailable episode, admin source assignment, actual MP4 playback/resume, subtitles/off/timing, progress save, one video instance, and existing movies.');
+  } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
+})().catch((error) => { console.error(error); process.exitCode = 1; });

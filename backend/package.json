@@ -12,7 +12,8 @@
     "prisma:studio": "node scripts/prisma.cjs studio",
     "admin:grant": "tsx src/scripts/grant-admin.ts",
     "test": "tsx tests/runTests.ts && tsx tests/vidcore.test.ts && tsx tests/watchPartyFlow.test.ts && tsx --test tests/callConnectionLifecycle.test.ts tests/catalogCaching.test.ts tests/productionEnvironment.test.ts tests/environment.test.ts",
-    "test:drama": "node tests/runDramaTests.cjs"
+    "test:drama": "node tests/runDramaTests.cjs",
+    "test:search-subtitles": "tsx --test tests/searchAndSubtitles.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1156.0",
