@@ -1,17 +1,21 @@
 import React, { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { colors, spacing } from '../../theme';
+import type { PlayerFailureDetails } from '@togetherflix/shared';
 
 export interface EmbeddedVideoPlayerProps {
   url: string;
   title: string;
   allowFullscreen?: boolean;
   onLoad?: () => void;
-  onError?: (message: string) => void;
+  onLoadStart?: () => void;
+  onLoadProgress?: (progress: number) => void;
+  onError?: (message: string, details?: PlayerFailureDetails) => void;
+  onDiagnostic?: (event: { event: 'navigation_blocked'; urlHost?: string }) => void;
 }
 
-export function EmbeddedVideoPlayer({ url, title, onLoad, onError, allowFullscreen = true }: EmbeddedVideoPlayerProps) {
+export function EmbeddedVideoPlayer({ url, title, onLoad, onLoadStart, onLoadProgress, onError, onDiagnostic, allowFullscreen = true }: EmbeddedVideoPlayerProps) {
   const allowedHost = useMemo(() => { try { return new URL(url).hostname; } catch { return ''; } }, [url]);
   if (!allowedHost) return <View style={styles.center}><Text style={styles.error}>Invalid embedded-player URL.</Text></View>;
   return <WebView
@@ -20,6 +24,8 @@ export function EmbeddedVideoPlayer({ url, title, onLoad, onError, allowFullscre
     originWhitelist={['https://*']}
     javaScriptEnabled
     domStorageEnabled
+    thirdPartyCookiesEnabled
+    sharedCookiesEnabled
     allowsFullscreenVideo={allowFullscreen}
     allowsInlineMediaPlayback
     mediaPlaybackRequiresUserAction
@@ -27,10 +33,21 @@ export function EmbeddedVideoPlayer({ url, title, onLoad, onError, allowFullscre
     startInLoadingState
     renderLoading={() => <View style={styles.center}><ActivityIndicator color={colors.primary} size="large" /><Text style={styles.loading}>Loading {title}…</Text></View>}
     onLoad={onLoad}
-    onError={(event) => onError?.(event.nativeEvent.description || 'The embedded player failed to load.')}
-    onHttpError={(event) => onError?.(`The embedded player returned HTTP ${event.nativeEvent.statusCode}.`)}
+    onLoadStart={onLoadStart}
+    onLoadProgress={(event) => onLoadProgress?.(event.nativeEvent.progress)}
+    onError={(event) => onError?.(event.nativeEvent.description || 'The embedded player failed to load.', { errorCode: event.nativeEvent.code, url: event.nativeEvent.url })}
+    onHttpError={(event) => onError?.(`The embedded player returned HTTP ${event.nativeEvent.statusCode}.`, { statusCode: event.nativeEvent.statusCode, url: event.nativeEvent.url })}
+    onRenderProcessGone={Platform.OS === 'android' ? (event) => onError?.(
+      event.nativeEvent.didCrash ? 'The Android WebView renderer crashed while loading this player.' : 'Android closed the WebView renderer while loading this player.',
+      { url },
+    ) : undefined}
     onShouldStartLoadWithRequest={(request) => {
-      try { return new URL(request.url).hostname === allowedHost; } catch { return false; }
+      try {
+        const host = new URL(request.url).hostname;
+        const allowed = host === allowedHost;
+        if (!allowed) onDiagnostic?.({ event: 'navigation_blocked', urlHost: host || undefined });
+        return allowed;
+      } catch { onDiagnostic?.({ event: 'navigation_blocked' }); return false; }
     }}
   />;
 }

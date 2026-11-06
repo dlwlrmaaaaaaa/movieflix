@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { EmbeddedVideoPlayerProps } from './EmbeddedVideoPlayer';
 
-export function EmbeddedVideoPlayer({ url, title, onLoad, onError, allowFullscreen = true }: EmbeddedVideoPlayerProps) {
+export function EmbeddedVideoPlayer({ url, title, onLoad, onLoadStart, onError, allowFullscreen = true }: EmbeddedVideoPlayerProps) {
+  // Browsers expose completion for cross-origin iframes, not document progress.
+  useEffect(() => { onLoadStart?.(); }, [url]);
   return React.createElement('iframe', {
     src: url,
     title,

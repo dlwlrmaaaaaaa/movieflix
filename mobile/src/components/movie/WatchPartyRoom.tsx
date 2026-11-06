@@ -19,6 +19,7 @@ import { VideoPlayerView } from '../player/VideoPlayerView';
 import { Button } from '../ui/Button';
 import { dramas } from '../../services/dramas';
 import { useEpisodeProgress } from '../../hooks/useEpisodeProgress';
+import { usePlayerDiagnostics } from '../../hooks/usePlayerDiagnostics';
 import { useEpisodeSubtitles } from '../player/EpisodeSubtitles';
 import { useQuery } from '@tanstack/react-query';
 import { colors } from '../../theme';
@@ -41,6 +42,7 @@ export function WatchPartyRoom() {
   const [fullscreen, setFullscreen] = useState(false);
   const frame = useRef<View>(null);
   const selection = room!.catalogSelection!;
+  const reportPlayer = usePlayerDiagnostics({ mediaType: selection.mediaType, tmdbId: selection.tmdbId, season: selection.season, episode: selection.episode });
   const code = room!.code;
   const episodeId = selection.episodeId;
   const episodeProgress = useEpisodeProgress(episodeId);
@@ -74,6 +76,7 @@ export function WatchPartyRoom() {
   const iframe = selection.playerType === 'iframe';
   const sharing = room!.playbackMode === 'SCREEN_SHARE';
   const canLoadEmbed = iframe && (isHost || (launchReady && !sharing));
+  useEffect(() => { if (iframe && canLoadEmbed && embed) reportPlayer('attempt_started', { providerId: embed.providerId, urlHost: new URL(embed.embedUrl).hostname }); }, [iframe, canLoadEmbed, embed?.providerId, embed?.embedUrl, reportPlayer]);
   useEffect(() => {
     setLaunchReady(false);
     if (!selection.launchAt) return;
@@ -137,7 +140,7 @@ export function WatchPartyRoom() {
           <View style={{ flex: 1, gap: 6 }}><Text style={styles.title}>{selection.title}</Text><Text style={styles.muted}>{selection.providerName}</Text><Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text></View>
         </View>
         <View ref={frame} style={[styles.stage, width < 600 && styles.smallStage, fullscreen && { width, height, borderRadius: 0, borderWidth: 0 }]}>
-          {sharing && !isHost ? <ScreenSharePlayer /> : sharing && isHost && selectedMovie ? <SoloVideoPlayer uri={selectedMovie.uri} initialPosition={position} onProgress={() => undefined} onError={setError} /> : iframe ? embed && (isHost || launchReady) ? <EmbeddedVideoPlayer key={embed.providerId} url={embed.embedUrl} title={selection.title} allowFullscreen={false} onLoad={() => setEmbedLoaded(true)} onError={setError} /> : <View style={styles.empty}>{selection.launchAt ? <ActivityIndicator color={colors.primary} /> : null}<Text style={styles.waitTitle}>{!isHost && !selection.launchAt ? 'Waiting for the host to start the movie' : 'Loading the movie player...'}</Text></View> : supported && selectedMovie ? <VideoPlayerView {...subtitles.playerProps} key={room!.selectedMovie?.id} subtitleOverlay={episodeId ? subtitles.overlay : null} onTimeline={episodeId ? episodeProgress.timeline : undefined} onEnded={() => { if (episodeId) { episodeProgress.flush(); setEpisodeEnded(true); } }} videoUri={selectedMovie.uri} onToggleControls={() => undefined} tapToFullscreen showFullscreenButton={false} fullscreenOverlay={mic} onPlayerState={(state) => { setPlayerState(state); reportViewerState(state); }} onPlayerError={setError} /> : <View style={styles.empty}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Preparing the movie...</Text></View>}
+          {sharing && !isHost ? <ScreenSharePlayer /> : sharing && isHost && selectedMovie ? <SoloVideoPlayer uri={selectedMovie.uri} initialPosition={position} onProgress={() => undefined} onError={setError} /> : iframe ? embed && (isHost || launchReady) ? <EmbeddedVideoPlayer key={embed.providerId} url={embed.embedUrl} title={selection.title} allowFullscreen={false} onLoad={() => { setEmbedLoaded(true); reportPlayer('document_loaded', { providerId: embed.providerId }); }} onDiagnostic={(event) => reportPlayer(event.event, { providerId: embed.providerId, urlHost: event.urlHost })} onError={(message, details) => { setError(message); reportPlayer('load_error', { providerId: embed.providerId, message, reason: details?.statusCode ? 'http_error' : 'network_error', statusCode: details?.statusCode, errorCode: details?.errorCode }); }} /> : <View style={styles.empty}>{selection.launchAt ? <ActivityIndicator color={colors.primary} /> : null}<Text style={styles.waitTitle}>{!isHost && !selection.launchAt ? 'Waiting for the host to start the movie' : 'Loading the movie player...'}</Text></View> : supported && selectedMovie ? <VideoPlayerView {...subtitles.playerProps} key={room!.selectedMovie?.id} subtitleOverlay={episodeId ? subtitles.overlay : null} onTimeline={episodeId ? episodeProgress.timeline : undefined} onEnded={() => { if (episodeId) { episodeProgress.flush(); setEpisodeEnded(true); } }} videoUri={selectedMovie.uri} onToggleControls={() => undefined} tapToFullscreen showFullscreenButton={false} fullscreenOverlay={mic} onPlayerState={(state) => { setPlayerState(state); reportViewerState(state); }} onPlayerError={setError} /> : <View style={styles.empty}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Preparing the movie...</Text></View>}
           {iframe && embed && !embedLoaded ? <View pointerEvents="none" style={styles.waiting}><ActivityIndicator color={colors.primary} /><Text style={styles.waitTitle}>Loading the movie player...</Text></View> : null}
           {fullscreen ? <View style={styles.fullscreenMic}>{mic}</View> : null}
           {supported && (waiting || isCountingDown || playerState === 'ERROR') ? <View pointerEvents="none" style={styles.waiting}><Text style={styles.waitTitle}>{playerState === 'ERROR' ? 'Movie could not load' : isCountingDown ? 'Starting together...' : isHost ? allViewersReady ? 'Ready for movie night' : 'Preparing both players...' : 'Waiting for the host to start the movie'}</Text><Text style={styles.muted}>{isHost ? 'Start when both viewers are ready.' : 'Playback follows the host automatically.'}</Text></View> : null}
