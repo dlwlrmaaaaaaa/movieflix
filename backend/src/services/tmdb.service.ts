@@ -1,3 +1,4 @@
+import { DramaCategory, DramaDetails, DramaPage, DramaSummary } from '@togetherflix/shared';
 import { MovieCatalogPage, TmdbMovieDetails, TmdbMovieSummary, TmdbTrailer } from '@togetherflix/shared';
 import { ENV } from '../config/env';
 import { RequestLimiter } from './requestLimiter';
@@ -53,6 +54,21 @@ function catalogPage(data: any): MovieCatalogPage {
     totalResults: Number(data.total_results) || 0,
     results: Array.isArray(data.results) ? data.results.map(summary).filter((movie: TmdbMovieSummary) => Number.isInteger(movie.id)) : [],
   };
+}
+
+export function classifyDrama(language: string, countries: string[]): DramaCategory {
+  if (language === 'ko' && countries.includes('KR')) return 'k-drama';
+  if (language === 'zh' && countries.includes('CN') && !countries.some((country) => country === 'TW' || country === 'HK')) return 'c-drama';
+  return 'tv';
+}
+function tvSummary(data: any): DramaSummary {
+  const countries = Array.isArray(data.origin_country) ? data.origin_country.filter((v: unknown) => typeof v === 'string') : [];
+  return { tmdbId: Number(data.id), title: String(data.name || data.original_name || 'Untitled'), originalTitle: String(data.original_name || data.name || ''),
+    category: classifyDrama(data.original_language, countries), originalLanguage: String(data.original_language || ''), originCountry: countries,
+    posterUrl: imageUrl(data.poster_path, 'w500'), backdropUrl: imageUrl(data.backdrop_path, 'w1280'), description: String(data.overview || ''),
+    year: /^\d{4}/.test(data.first_air_date || '') ? Number(data.first_air_date.slice(0,4)) : null,
+    rating: Number(data.vote_average) || 0, genres: Array.isArray(data.genres) ? data.genres.map((g: any) => String(g.name)) : (data.genre_ids || []).map((id: number) => ({ 18: 'Drama', 35: 'Comedy', 9648: 'Mystery', 10765: 'Sci-Fi & Fantasy', 10759: 'Action & Adventure', 10749: 'Romance' } as Record<number, string>)[id]).filter(Boolean),
+    ...(Number.isInteger(data.number_of_seasons) ? { numberOfSeasons: data.number_of_seasons } : {}) };
 }
 
 export class TmdbService {
@@ -147,6 +163,43 @@ export class TmdbService {
         : [],
       trailer,
     };
+  }
+
+  static async dramas(category: DramaCategory, page: unknown, trending = false, filters: { query?: string; year?: string; genre?: string; country?: string } = {}): Promise<DramaPage> {
+    if (!['k-drama', 'c-drama', 'tv'].includes(category)) throw new UpstreamServiceError('Invalid drama category.', 400);
+    const query = filters.query?.trim();
+    if (query && (query.length < 2 || query.length > 100)) throw new UpstreamServiceError('Search must contain 2 to 100 characters.', 400);
+    if (filters.year && !/^\d{4}$/.test(filters.year)) throw new UpstreamServiceError('Invalid year.', 400);
+    if (filters.genre && !/^\d+$/.test(filters.genre)) throw new UpstreamServiceError('Invalid genre.', 400);
+    if (filters.country && !/^[A-Z]{2}$/.test(filters.country)) throw new UpstreamServiceError('Invalid country.', 400);
+    const country = category === 'k-drama' ? 'KR' : category === 'c-drama' ? 'CN' : filters.country;
+    const language = category === 'k-drama' ? 'ko' : category === 'c-drama' ? 'zh' : undefined;
+    // TMDB trending does not support discovery filters. Filter the actual weekly trending results by origin.
+    const path = query ? '/search/tv' : trending ? '/trending/tv/week' : '/discover/tv';
+    const data: any = await this.request(path, { page: pageNumber(page), include_adult: false,
+      ...(query ? { query, first_air_date_year: filters.year } : trending ? {} : {
+        with_origin_country: country, with_original_language: language, with_genres: filters.genre || (category === 'tv' ? undefined : '18'),
+        first_air_date_year: filters.year, sort_by: 'popularity.desc', include_null_first_air_dates: false,
+      }) });
+    const results = (Array.isArray(data.results) ? data.results : []).filter((item: any) => {
+      const classified = tvSummary(item);
+      return (category === 'tv' || (classified.category === category && item.genre_ids?.includes(18))) && (!filters.country || classified.originCountry.includes(filters.country))
+        && (!filters.genre || item.genre_ids?.includes(Number(filters.genre))) && (!filters.year || classified.year === Number(filters.year));
+    }).map(tvSummary);
+    return { page: data.page || 1, totalPages: Math.min(data.total_pages || 1, 500), totalResults: data.total_results || 0, results };
+  }
+
+  static async dramaDetails(id: unknown): Promise<DramaDetails> {
+    const data: any = await this.request(`/tv/${validatedTmdbId(id)}`, { append_to_response: 'credits' });
+    return { ...tvSummary(data), cast: (data.credits?.cast || []).slice(0, 15).map((person: any) => String(person.name)),
+      seasons: (data.seasons || []).filter((season: any) => season.season_number >= 1).map((season: any) => ({ seasonNumber: season.season_number, title: String(season.name || `Season ${season.season_number}`), episodeCount: season.episode_count || 0 })) };
+  }
+
+  static async dramaSeason(id: unknown, season: unknown) {
+    const data: any = await this.request(`/tv/${validatedTmdbId(id)}/season/${validatedSeason(season)}`);
+    return { title: String(data.name || ''), episodes: (data.episodes || []).map((episode: any) => ({ episodeNumber: validatedEpisode(episode.episode_number), title: String(episode.name || `Episode ${episode.episode_number}`),
+      runtime: Number.isInteger(episode.runtime) && episode.runtime > 0 ? episode.runtime : null,
+      description: String(episode.overview || ''), thumbnailUrl: imageUrl(episode.still_path, 'w500'), airDate: typeof episode.air_date === 'string' ? episode.air_date : null })) };
   }
 
   static async tvEpisode(id: unknown, seasonValue: unknown, episodeValue: unknown): Promise<{ tmdbId: number; season: number; episode: number }> {

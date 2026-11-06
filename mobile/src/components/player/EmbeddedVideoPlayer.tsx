@@ -26,7 +26,7 @@ export function EmbeddedVideoPlayer({ url, title, onLoad, onError, allowFullscre
     setSupportMultipleWindows={false}
     startInLoadingState
     renderLoading={() => <View style={styles.center}><ActivityIndicator color={colors.primary} size="large" /><Text style={styles.loading}>Loading {title}…</Text></View>}
-    onLoadEnd={onLoad}
+    onLoad={onLoad}
     onError={(event) => onError?.(event.nativeEvent.description || 'The embedded player failed to load.')}
     onHttpError={(event) => onError?.(`The embedded player returned HTTP ${event.nativeEvent.statusCode}.`)}
     onShouldStartLoadWithRequest={(request) => {

@@ -28,10 +28,10 @@ export interface ClientToServerEvents {
   'party:start': (payload: { roomCode: string }, callback: (result: { success: boolean; error?: string }) => void) => void;
 
   // Playback commands
-  'playback:play': (payload: { roomCode: string; position: number; clientTimestamp: number }) => void;
-  'playback:pause': (payload: { roomCode: string; position: number }) => void;
-  'playback:seek': (payload: { roomCode: string; position: number }) => void;
-  'playback:heartbeat': (payload: { roomCode: string; position: number; isPlaying: boolean; clientTimestamp: number }) => void;
+  'playback:play': (payload: { roomCode: string; movieId?: string; position: number; clientTimestamp: number }) => void;
+  'playback:pause': (payload: { roomCode: string; movieId?: string; position: number }) => void;
+  'playback:seek': (payload: { roomCode: string; movieId?: string; position: number }) => void;
+  'playback:heartbeat': (payload: { movieId?: string; roomCode: string; position: number; isPlaying: boolean; clientTimestamp: number }) => void;
   'playback:resync_request': (payload: { roomCode: string }) => void;
   'playback:mode_change': (payload: { roomCode: string; mode: PlaybackMode }) => void;
 

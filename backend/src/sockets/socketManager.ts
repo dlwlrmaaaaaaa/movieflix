@@ -380,12 +380,14 @@ export class SocketManager {
           return;
         }
 
+        if (room.catalogSelection?.episodeId && payload.movieId !== room.selectedMovie?.id) return;
+
         if (room.playbackMode !== 'DIRECT') {
           socket.emit('room:error', { message: 'Direct playback controls are unavailable while screen sharing or manual mode is active.' });
           return;
         }
 
-        if (!room.selectedMovie || !(await RoomService.allViewersReady(roomCode))) {
+        if ((room.catalogSelection?.episodeId && !room.guestId) || !room.selectedMovie || !(await RoomService.allViewersReady(roomCode))) {
           socket.emit('room:error', { message: 'Every connected viewer must finish preparing the movie before starting.', code: 'VIEWERS_NOT_READY' });
           return;
         }
@@ -400,7 +402,8 @@ export class SocketManager {
         const scheduledTime = Date.now() + 2500;
         // Persist the future anchor too. After a backend restart, a joining
         // device therefore does not advance the movie before its start time.
-        const saved = await RoomService.savePlaybackState(room.id, requestedPosition, true, new Date(scheduledTime));
+        const saved = await RoomService.savePlaybackState(room.id, requestedPosition, true, new Date(scheduledTime), room.catalogSelection?.episodeId ? { movieId: room.selectedMovie!.id, version: room.playbackVersion || 0 } : undefined);
+        if (!saved) return;
         const state: PlaybackState = {
           action: 'PLAY',
           position: requestedPosition,
@@ -438,11 +441,14 @@ export class SocketManager {
         }
 
 
+        if (room.catalogSelection?.episodeId && payload.movieId !== room.selectedMovie?.id) return;
+
         if (room.playbackMode !== 'DIRECT') return;
 
         const requestedPosition = Number(payload.position);
         if (!Number.isFinite(requestedPosition) || requestedPosition < 0) return;
-        const saved = await RoomService.savePlaybackState(room.id, requestedPosition, false);
+        const saved = await RoomService.savePlaybackState(room.id, requestedPosition, false, undefined, room.catalogSelection?.episodeId ? { movieId: room.selectedMovie!.id, version: room.playbackVersion || 0 } : undefined);
+        if (!saved) return;
         const state: PlaybackState = {
           action: 'PAUSE',
           position: requestedPosition,
@@ -478,6 +484,8 @@ export class SocketManager {
         }
 
 
+        if (room.catalogSelection?.episodeId && payload.movieId !== room.selectedMovie?.id) return;
+
         if (room.playbackMode !== 'DIRECT') return;
 
         const requestedPosition = Number(payload.position);
@@ -485,7 +493,8 @@ export class SocketManager {
         const currentRuntime = this.activeRoomStates.get(roomCode);
         const isPlaying = currentRuntime ? currentRuntime.isPlaying : false;
         const scheduledTime = isPlaying ? Date.now() + 1500 : undefined;
-        const saved = await RoomService.savePlaybackState(room.id, requestedPosition, isPlaying, scheduledTime ? new Date(scheduledTime) : undefined);
+        const saved = await RoomService.savePlaybackState(room.id, requestedPosition, isPlaying, scheduledTime ? new Date(scheduledTime) : undefined, room.catalogSelection?.episodeId ? { movieId: room.selectedMovie!.id, version: room.playbackVersion || 0 } : undefined);
+        if (!saved) return;
         const state: PlaybackState = {
           // Seeking while playing is rescheduled, not applied independently on
           // each device, so both players resume from the target together.
@@ -519,15 +528,20 @@ export class SocketManager {
         const runtime = this.activeRoomStates.get(roomCode);
         const room = await RoomService.getRoomByCode(roomCode);
         const position = Number(payload.position);
+        if (room?.catalogSelection?.episodeId && payload.movieId !== room.selectedMovie?.id) return;
 
         // The host is the only playback authority; never forward guest packets
         // back to the host or let an old scheduled state block host heartbeats.
         if (runtime && room?.playbackMode === 'DIRECT' && canHostControl(room.hostId, userId) && Number.isFinite(position) && position >= 0) {
+          if (room.catalogSelection?.episodeId) {
+            const saved = await prisma.room.updateMany({ where: { id: room.id, selectedMovieId: payload.movieId, playbackVersion: room.playbackVersion, status: { not: 'ENDED' } }, data: { playbackPosition: position, playbackIsPlaying: payload.isPlaying, playbackUpdatedAt: new Date() } });
+            if (!saved.count || this.activeRoomStates.get(roomCode) !== runtime) return;
+          }
           runtime.position = position;
           runtime.isPlaying = payload.isPlaying;
           runtime.lastUpdatedServerTime = Date.now();
           runtime.scheduledStartTime = undefined;
-          void RoomService.savePlaybackState(room.id, position, payload.isPlaying);
+          if (!room.catalogSelection?.episodeId) void RoomService.savePlaybackState(room.id, position, payload.isPlaying);
 
           socket.to(`room:${roomCode}`).emit('playback:heartbeat_tick', {
             hostPosition: position,

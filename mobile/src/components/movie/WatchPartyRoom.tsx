@@ -17,6 +17,10 @@ import { ScreenSharePlayer } from '../player/ScreenSharePlayer';
 import { SoloVideoPlayer } from '../player/SoloVideoPlayer';
 import { VideoPlayerView } from '../player/VideoPlayerView';
 import { Button } from '../ui/Button';
+import { dramas } from '../../services/dramas';
+import { useEpisodeProgress } from '../../hooks/useEpisodeProgress';
+import { useEpisodeSubtitles } from '../player/EpisodeSubtitles';
+import { useQuery } from '@tanstack/react-query';
 import { colors } from '../../theme';
 
 export function WatchPartyRoom() {
@@ -38,6 +42,34 @@ export function WatchPartyRoom() {
   const frame = useRef<View>(null);
   const selection = room!.catalogSelection!;
   const code = room!.code;
+  const episodeId = selection.episodeId;
+  const episodeProgress = useEpisodeProgress(episodeId);
+  const tracks = useQuery({ queryKey: ['episode-subtitles', episodeId], queryFn: () => dramas.subtitles(episodeId!), enabled: !!episodeId });
+  const subtitles = useEpisodeSubtitles(tracks.data?.subtitles || [], position);
+  const nextEpisode = useQuery({ queryKey: ['party-next', code, episodeId], queryFn: () => dramas.roomNext(code), enabled: !!episodeId });
+  const [autoNext, setAutoNext] = useState(false);
+  const [episodeEnded, setEpisodeEnded] = useState(false);
+  const transition = useRef(false);
+  const pendingStart = useRef<string | null>(null);
+  useEffect(() => { setEpisodeEnded(false); transition.current = false; setError(''); }, [episodeId]);
+  useEffect(() => { if (!isPlaying && episodeId) episodeProgress.flush(); }, [isPlaying, episodeId]);
+  const advanceEpisode = async (ended = false) => {
+    if (!room || !isHost || !nextEpisode.data?.episode || transition.current) return;
+    transition.current = true;
+    try {
+      episodeProgress.flush();
+      const result = await dramas.select(room, nextEpisode.data.episode.id, ended);
+      pendingStart.current = ended ? result.room.selectedMovie?.id || null : null;
+      setRoom(result.room);
+    } catch (failure: any) { setError(failure.message); transition.current = false; }
+  };
+  useEffect(() => { if (episodeEnded && autoNext && isHost) void advanceEpisode(true); }, [episodeEnded, autoNext]);
+  useEffect(() => {
+    if (pendingStart.current && room?.selectedMovie?.id === pendingStart.current && allViewersReady && room.guestId && isConnected) {
+      pendingStart.current = null;
+      play();
+    }
+  }, [room?.selectedMovie?.id, allViewersReady, isConnected]);
   const supported = selection.playerType === 'direct' && room!.playbackMode === 'DIRECT';
   const iframe = selection.playerType === 'iframe';
   const sharing = room!.playbackMode === 'SCREEN_SHARE';
@@ -105,7 +137,7 @@ export function WatchPartyRoom() {
           <View style={{ flex: 1, gap: 6 }}><Text style={styles.title}>{selection.title}</Text><Text style={styles.muted}>{selection.providerName}</Text><Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text></View>
         </View>
         <View ref={frame} style={[styles.stage, width < 600 && styles.smallStage, fullscreen && { width, height, borderRadius: 0, borderWidth: 0 }]}>
-          {sharing && !isHost ? <ScreenSharePlayer /> : sharing && isHost && selectedMovie ? <SoloVideoPlayer uri={selectedMovie.uri} initialPosition={position} onProgress={() => undefined} onError={setError} /> : iframe ? embed && (isHost || launchReady) ? <EmbeddedVideoPlayer key={embed.providerId} url={embed.embedUrl} title={selection.title} allowFullscreen={false} onLoad={() => setEmbedLoaded(true)} onError={setError} /> : <View style={styles.empty}>{selection.launchAt ? <ActivityIndicator color={colors.primary} /> : null}<Text style={styles.waitTitle}>{!isHost && !selection.launchAt ? 'Waiting for the host to start the movie' : 'Loading the movie player...'}</Text></View> : supported && selectedMovie ? <VideoPlayerView videoUri={selectedMovie.uri} onToggleControls={() => undefined} tapToFullscreen showFullscreenButton={false} fullscreenOverlay={mic} onPlayerState={(state) => { setPlayerState(state); reportViewerState(state); }} onPlayerError={setError} /> : <View style={styles.empty}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Preparing the movie...</Text></View>}
+          {sharing && !isHost ? <ScreenSharePlayer /> : sharing && isHost && selectedMovie ? <SoloVideoPlayer uri={selectedMovie.uri} initialPosition={position} onProgress={() => undefined} onError={setError} /> : iframe ? embed && (isHost || launchReady) ? <EmbeddedVideoPlayer key={embed.providerId} url={embed.embedUrl} title={selection.title} allowFullscreen={false} onLoad={() => setEmbedLoaded(true)} onError={setError} /> : <View style={styles.empty}>{selection.launchAt ? <ActivityIndicator color={colors.primary} /> : null}<Text style={styles.waitTitle}>{!isHost && !selection.launchAt ? 'Waiting for the host to start the movie' : 'Loading the movie player...'}</Text></View> : supported && selectedMovie ? <VideoPlayerView key={room!.selectedMovie?.id} subtitleOverlay={episodeId ? subtitles.overlay : null} onTimeline={episodeId ? episodeProgress.timeline : undefined} onEnded={() => { if (episodeId) { episodeProgress.flush(); setEpisodeEnded(true); } }} videoUri={selectedMovie.uri} onToggleControls={() => undefined} tapToFullscreen showFullscreenButton={false} fullscreenOverlay={mic} onPlayerState={(state) => { setPlayerState(state); reportViewerState(state); }} onPlayerError={setError} /> : <View style={styles.empty}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Preparing the movie...</Text></View>}
           {iframe && embed && !embedLoaded ? <View pointerEvents="none" style={styles.waiting}><ActivityIndicator color={colors.primary} /><Text style={styles.waitTitle}>Loading the movie player...</Text></View> : null}
           {fullscreen ? <View style={styles.fullscreenMic}>{mic}</View> : null}
           {supported && (waiting || isCountingDown || playerState === 'ERROR') ? <View pointerEvents="none" style={styles.waiting}><Text style={styles.waitTitle}>{playerState === 'ERROR' ? 'Movie could not load' : isCountingDown ? 'Starting together...' : isHost ? allViewersReady ? 'Ready for movie night' : 'Preparing both players...' : 'Waiting for the host to start the movie'}</Text><Text style={styles.muted}>{isHost ? 'Start when both viewers are ready.' : 'Playback follows the host automatically.'}</Text></View> : null}
@@ -116,6 +148,7 @@ export function WatchPartyRoom() {
           {iframe && !isHost && launchReady ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fullscreen movie" style={styles.mic} onPress={openFullscreen}><Maximize color="#fff" size={23} /></TouchableOpacity> : null}
           {mic}
         </View>
+        {episodeId && !fullscreen ? <View style={{ gap: 12 }}>{subtitles.controls}{isHost ? <View style={styles.controls}><Button title={`Auto next: ${autoNext ? 'On' : 'Off'}`} variant="secondary" onPress={() => setAutoNext(!autoNext)} />{nextEpisode.data?.episode ? <Button title="Next Episode" onPress={() => void advanceEpisode(false)} /> : <Text style={styles.muted}>No next available episode.</Text>}<Button title="Choose episode" variant="secondary" onPress={() => router.push(`/drama/${selection.tmdbId}` as any)} /></View> : null}{episodeProgress.error ? <Text style={styles.error}>{episodeProgress.error}</Text> : null}</View> : null}
         {iframe && !fullscreen ? <Text style={styles.help}>The host opens both players together. Press Play inside the player if requested. Iframe pause and seeking remain independent.</Text> : null}
         {supported && !fullscreen ? <Text style={styles.help}>Tap the video for fullscreen. {isHost ? 'You control playback.' : 'Only the host can pause or seek.'}</Text> : null}
         {error || callError ? <Text accessibilityRole="alert" style={styles.error}>{error || callError}</Text> : null}

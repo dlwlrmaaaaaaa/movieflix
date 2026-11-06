@@ -67,6 +67,14 @@
       }
     },
     "owner": "devareajustins-team",
-    "description": "A cinematic place for your movies, with a separate space for movie nights together."
+    "description": "A cinematic place for your movies, with a separate space for movie nights together.",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9014f563-67ca-46b3-8073-4a9193fe9f62",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 3000
+    }
   }
 }

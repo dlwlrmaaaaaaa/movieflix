@@ -256,6 +256,7 @@ export function RoomProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const movie = room?.selectedMovie;
     if (!movie || movie.status !== 'READY' || !inParty) return;
+    setSelectedMovie(null);
     let active = true;
     let renewTimer: ReturnType<typeof setTimeout> | undefined;
     const loadPlaybackUrl = async () => {

@@ -158,7 +158,8 @@ export class MovieService {
     const movie = await prisma.movie.findUnique({ where: { id: movieId } });
     if (!movie || movie.status !== MovieStatus.READY) throw new Error('Movie is not ready for playback.');
     const room = await prisma.room.findFirst({ where: { selectedMovieId: movieId, OR: [{ hostId: userId }, { guestId: userId }], status: { not: 'ENDED' } } });
-    if (!room && movie.ownerId !== userId) throw new Error('You are not authorized to play this movie.');
+    const episodeSource = !room && movie.ownerId !== userId ? await prisma.episodeSource.findFirst({ where: { movieId, enabled: true }, select: { id: true } }) : null;
+    if (!room && !episodeSource && movie.ownerId !== userId) throw new Error('You are not authorized to play this movie.');
     if (movie.sourceType === MovieSourceType.STREAM) {
       if (!movie.streamingUrl) throw new Error('This streaming movie no longer has a valid source URL.');
       return { playbackUrl: movie.streamingUrl, expiresInSeconds: null, sourceType: movie.sourceType, streamingFormat: movie.streamingFormat };

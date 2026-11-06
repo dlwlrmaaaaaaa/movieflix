@@ -7,6 +7,9 @@ import { useKeepAwake } from 'expo-keep-awake';
 
 export interface VideoPlayerViewProps {
   videoUri: string;
+  subtitleOverlay?: React.ReactNode;
+  onTimeline?: (position: number, duration: number) => void;
+  onEnded?: () => void;
   onToggleControls: () => void;
   onPlayerState?: (state: 'LOADING' | 'BUFFERING' | 'READY' | 'ERROR') => void;
   onPlayerError?: (message: string) => void;
@@ -15,7 +18,7 @@ export interface VideoPlayerViewProps {
   fullscreenOverlay?: React.ReactNode;
 }
 
-export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay }: VideoPlayerViewProps) {
+export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay, subtitleOverlay, onTimeline, onEnded }: VideoPlayerViewProps) {
   // Keep phone screen awake during movie watching
   useKeepAwake();
 
@@ -44,6 +47,8 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
   onPlayerStateRef.current = onPlayerState;
   onPlayerErrorRef.current = onPlayerError;
 
+  const episodeCallbacks = useRef({ onTimeline, onEnded });
+  episodeCallbacks.current = { onTimeline, onEnded };
   const player = useVideoPlayer(videoUri, (p) => {
     p.loop = false;
     p.playbackRate = playbackRate;
@@ -78,6 +83,11 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
     const subscription = player.addListener('statusChange', notify as any);
     return () => subscription.remove();
   }, [player, setBuffering]);
+
+  useEffect(() => {
+    const subscription = player.addListener('playToEnd', () => episodeCallbacks.current.onEnded?.());
+    return () => subscription.remove();
+  }, [player]);
 
   // 1. Sync Play / Pause state
   useEffect(() => {
@@ -117,6 +127,7 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
 
     const timer = setInterval(() => {
       updatePositionRef.current(player.currentTime, player.duration);
+      episodeCallbacks.current.onTimeline?.(player.currentTime, player.duration);
     }, 500);
 
     return () => clearInterval(timer);
@@ -140,11 +151,11 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
   };
   const video = () => <VideoView ref={viewRef} player={player} style={styles.video} contentFit="contain" nativeControls={false} allowsFullscreen={false} pointerEvents="none" />;
   return <View ref={containerRef} style={styles.container}>
-    {Platform.OS === 'web' || !fullscreen ? <TouchableWithoutFeedback accessibilityRole={tapToFullscreen ? 'button' : undefined} accessibilityLabel={tapToFullscreen ? 'Video ? tap for fullscreen' : undefined} onPress={tapToFullscreen ? openFullscreen : onToggleControls}><View style={styles.container}>{video()}</View></TouchableWithoutFeedback> : null}
+    {Platform.OS === 'web' || !fullscreen ? <TouchableWithoutFeedback accessibilityRole={tapToFullscreen ? 'button' : undefined} accessibilityLabel={tapToFullscreen ? 'Video ? tap for fullscreen' : undefined} onPress={tapToFullscreen ? openFullscreen : onToggleControls}><View style={styles.container}>{video()}{subtitleOverlay}</View></TouchableWithoutFeedback> : null}
     {showFullscreenButton ? <TouchableOpacity accessibilityLabel="Fullscreen video" onPress={openFullscreen} style={styles.fullscreenButton}><Text style={{ color: '#fff' }}>Fullscreen</Text></TouchableOpacity> : null}
     {fullscreen && Platform.OS === 'web' ? <View style={styles.micOverlay}>{fullscreenOverlay}</View> : null}
     {Platform.OS !== 'web' ? <Modal visible={fullscreen} onRequestClose={() => setFullscreen(false)} statusBarTranslucent supportedOrientations={['portrait', 'landscape']}><View style={styles.container}>
-      {fullscreen ? <TouchableWithoutFeedback accessibilityLabel="Video ? tap to exit fullscreen" onPress={() => setFullscreen(false)}><View style={styles.container}>{video()}</View></TouchableWithoutFeedback> : null}
+      {fullscreen ? <TouchableWithoutFeedback accessibilityLabel="Video ? tap to exit fullscreen" onPress={() => setFullscreen(false)}><View style={styles.container}>{video()}{subtitleOverlay}</View></TouchableWithoutFeedback> : null}
       <View style={styles.micOverlay}>{fullscreenOverlay}</View>
     </View></Modal> : null}
   </View>;

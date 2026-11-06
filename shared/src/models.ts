@@ -201,6 +201,7 @@ export interface RoomParticipant {
 
 /** Canonical metadata resolved by the server, never an arbitrary client iframe URL. */
 export interface RoomCatalogSelection {
+  episodeId?: string;
   tmdbId: number;
   mediaType: 'movie' | 'tv';
   title: string;

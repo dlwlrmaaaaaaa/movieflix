@@ -27,7 +27,7 @@ const PlaybackSyncContext = createContext<PlaybackSyncContextType | undefined>(u
 
 export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
   const { socket } = useSocket();
-  const { room, isHost } = useRoom();
+  const { room, isHost, setRoom } = useRoom();
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [position, setPosition] = useState<number>(0);
@@ -50,7 +50,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
   // versions are scoped to a room/movie generation, so discard the previous
   // room's version before accepting its successor's initial sync packet.
   useEffect(() => {
-    latestVersionRef.current = -1;
+    latestVersionRef.current = room?.catalogSelection?.episodeId ? room.playbackVersion || 0 : -1;
     latestPositionRef.current = 0;
     if (scheduledStartTimerRef.current) clearTimeout(scheduledStartTimerRef.current);
     scheduledStartTimerRef.current = null;
@@ -90,6 +90,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
 
     // 2. Playback state updates (PLAY, PAUSE, SEEK)
     socket.on('playback:sync', (state: PlaybackState) => {
+      if (typeof state.version === 'number') setRoom((current) => current?.catalogSelection?.episodeId && state.version! >= (current.playbackVersion || 0) ? { ...current, playbackVersion: state.version, playbackPosition: state.position, playbackIsPlaying: state.isPlaying } : current);
       // Socket reconnects can replay a state packet. Versions are assigned by
       // the server, so equal/older packets must not restart a settled player.
       if (typeof state.version === 'number' && (state.version < latestVersionRef.current || (state.version === latestVersionRef.current && state.updatedBy !== 'SYSTEM_RESYNC'))) return;
@@ -178,12 +179,13 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
       if (rateResetTimerRef.current) clearTimeout(rateResetTimerRef.current);
       if (scheduledStartTimerRef.current) clearTimeout(scheduledStartTimerRef.current);
     };
-  }, [socket, room?.code, isHost]);
+  }, [socket, room?.code, room?.selectedMovie?.id, isHost]);
 
   function play() {
     if (!room || !socket || !isHost) return;
     socket.emit('playback:play', {
       roomCode: room.code,
+      movieId: room.selectedMovie?.id,
       position,
       clientTimestamp: Date.now(),
     });
@@ -193,6 +195,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
     if (!room || !socket || !isHost) return;
     socket.emit('playback:pause', {
       roomCode: room.code,
+      movieId: room.selectedMovie?.id,
       position,
     });
   }
@@ -202,6 +205,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
     setSeekTarget(pos);
     socket.emit('playback:seek', {
       roomCode: room.code,
+      movieId: room.selectedMovie?.id,
       position: pos,
     });
   }
@@ -217,6 +221,7 @@ export function PlaybackSyncProvider({ children }: { children: ReactNode }) {
       if (now - lastHeartbeatTimeRef.current >= 2000) {
         lastHeartbeatTimeRef.current = now;
         socket.emit('playback:heartbeat', {
+        movieId: room.selectedMovie?.id,
           roomCode: room.code,
           position: pos,
           isPlaying,

@@ -115,18 +115,16 @@ export class DiscoveryController {
         return;
       }
       const show = await TmdbService.tvEpisode(req.params.id, req.params.season, req.params.episode);
-      const player = await embedProviderRegistry.resolveTvEpisode(
-        show.tmdbId,
-        show.season,
-        show.episode,
-        platform,
-        requestedFormat,
-      );
+      const players = await embedProviderRegistry.resolveAll({
+        mediaType: 'tv', tmdbId: show.tmdbId, season: show.season, episode: show.episode,
+        ...(requestedFormat ? { tvUrlFormat: requestedFormat } : {}),
+      }, platform);
+      const player = players[0];
       if (!player) {
         res.status(404).json({ success: false, message: 'No authorized embedded player is configured for this TV episode.' });
         return;
       }
-      res.json({ success: true, player });
+      res.json({ success: true, player, players });
     } catch (error) { sendError(error, res, next); }
   }
 

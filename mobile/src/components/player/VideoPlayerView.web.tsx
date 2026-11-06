@@ -5,7 +5,7 @@ import { useCall } from '../../context/CallContext';
 import type { VideoPlayerViewProps } from './VideoPlayerView';
 
 /** Use real media events; Expo Video 1.1's web adapter does not emit statusChange. */
-export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay }: VideoPlayerViewProps) {
+export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onPlayerError, tapToFullscreen = false, showFullscreenButton = true, fullscreenOverlay, subtitleOverlay, onTimeline, onEnded }: VideoPlayerViewProps) {
   const { isPlaying, playbackRate, seekTarget, clearSeekTarget, updateLocalPosition, setBuffering } = usePlaybackSync();
   const { movieVolume } = useCall();
   const element = useRef<HTMLVideoElement | null>(null);
@@ -14,8 +14,8 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
   const [fullscreen, setFullscreen] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const state = useRef('');
-  const callbacks = useRef({ onPlayerState, onPlayerError, updateLocalPosition, setBuffering });
-  callbacks.current = { onPlayerState, onPlayerError, updateLocalPosition, setBuffering };
+  const callbacks = useRef({ onPlayerState, onPlayerError, updateLocalPosition, setBuffering, onTimeline, onEnded });
+  callbacks.current = { onPlayerState, onPlayerError, updateLocalPosition, setBuffering, onTimeline, onEnded };
   const notify = (next: 'LOADING' | 'BUFFERING' | 'READY' | 'ERROR') => {
     if (state.current === next) return;
     state.current = next;
@@ -40,7 +40,7 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
   useEffect(() => {
     const timer = setInterval(() => {
       const video = element.current;
-      if (video) callbacks.current.updateLocalPosition(video.currentTime, Number.isFinite(video.duration) ? video.duration : 0);
+      if (video) { callbacks.current.updateLocalPosition(video.currentTime, Number.isFinite(video.duration) ? video.duration : 0); callbacks.current.onTimeline?.(video.currentTime, Number.isFinite(video.duration) ? video.duration : 0); }
     }, 500);
     return () => clearInterval(timer);
   }, []);
@@ -61,6 +61,7 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
     {React.createElement('video', {
       ref: element, src: videoUri, preload: 'auto', playsInline: true,
       controls: false, disablePictureInPicture: true, tabIndex: -1,
+      onEnded: () => callbacks.current.onEnded?.(),
       onClick: tap, onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
       onCanPlay: () => { setReady(true); notify('READY'); },
       onWaiting: () => notify(isPlaying ? 'BUFFERING' : 'LOADING'),
@@ -68,6 +69,7 @@ export function VideoPlayerView({ videoUri, onToggleControls, onPlayerState, onP
       onError: () => { notify('ERROR'); callbacks.current.onPlayerError?.('The movie source could not be loaded.'); },
       style: { width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' },
     })}
+    {subtitleOverlay}
     {autoplayBlocked ? <View pointerEvents="none" style={styles.autoplay}><Text style={styles.text}>Tap the video to allow playback.</Text></View> : null}
     {showFullscreenButton && !fullscreen ? <TouchableOpacity accessibilityLabel="Fullscreen video" style={styles.button} onPress={openFullscreen}><Text style={styles.text}>Fullscreen</Text></TouchableOpacity> : null}
     {fullscreen ? <View style={styles.microphone}>{fullscreenOverlay}</View> : null}

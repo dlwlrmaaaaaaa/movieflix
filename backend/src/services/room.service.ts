@@ -189,8 +189,12 @@ export class RoomService {
     });
   }
 
-  static async savePlaybackState(roomId: string, position: number, isPlaying: boolean, anchorTime = new Date()) {
-    return prisma.room.update({ where: { id: roomId }, data: { status: 'WATCHING', playbackPosition: position, playbackIsPlaying: isPlaying, playbackUpdatedAt: anchorTime, playbackVersion: { increment: 1 } } as any });
+  static async savePlaybackState(roomId: string, position: number, isPlaying: boolean, anchorTime = new Date(), expected?: { movieId: string; version: number }) {
+    const data = { status: 'WATCHING' as const, playbackPosition: position, playbackIsPlaying: isPlaying, playbackUpdatedAt: anchorTime, playbackVersion: { increment: 1 } };
+    if (!expected) return prisma.room.update({ where: { id: roomId }, data });
+    const claimed = await prisma.room.updateMany({ where: { id: roomId, selectedMovieId: expected.movieId, playbackVersion: expected.version, status: { not: 'ENDED' } }, data });
+    if (!claimed.count) return null;
+    return prisma.room.findUnique({ where: { id: roomId } });
   }
 
   static async setInitialPosition(roomId: string, position: number) {

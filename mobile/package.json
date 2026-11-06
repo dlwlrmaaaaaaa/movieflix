@@ -29,6 +29,7 @@
     "expo-linking": "~6.3.1",
     "expo-router": "~3.5.23",
     "expo-status-bar": "~1.12.1",
+    "expo-updates": "~0.25.28",
     "expo-video": "~1.1.9",
     "livekit-client": "2.18.5",
     "lucide-react-native": "^0.383.0",

@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.routes';
 import roomRoutes from './routes/room.routes';
 import callRoutes from './routes/call.routes';
 import historyRoutes from './routes/history.routes';
+import dramaRoutes from './routes/drama.routes';
 import movieRoutes from './routes/movie.routes';
 import userRoutes from './routes/user.routes';
 import partyLandingRoutes from './routes/partyLanding.routes';
@@ -57,6 +58,7 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/call', callRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/movies', movieRoutes);
+app.use('/api/dramas', dramaRoutes);
 app.use('/api/users', userRoutes);
 
 // Error Handler

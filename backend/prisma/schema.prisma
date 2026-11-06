@@ -87,6 +87,7 @@ model User {
   movies          Movie[]
   watchlist       UserWatchlist[]
   watchProgress   WatchProgress[]
+  episodeProgress EpisodeProgress[]
 
   @@index([email])
 }
@@ -198,6 +199,7 @@ model Movie {
   licenseUrl        String?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
+  episodeSources   EpisodeSource[]
   parts            MovieUploadPart[]
   selectedByRooms  Room[]      @relation("SelectedRoomMovie")
 
@@ -272,4 +274,80 @@ model MovieHistory {
   notes           String?
 
   @@index([userId])
+}
+
+model Drama {
+  id               String @id @default(uuid())
+  tmdbId           Int @unique
+  title            String
+  originalTitle    String
+  category         String
+  originalLanguage String
+  originCountry    String[]
+  posterUrl        String?
+  backdropUrl      String?
+  description      String
+  year             Int?
+  rating           Float @default(0)
+  genres           String[]
+  seasons          Season[]
+}
+model Season {
+  id           String @id @default(uuid())
+  dramaId      String
+  drama        Drama @relation(fields: [dramaId], references: [id], onDelete: Cascade)
+  seasonNumber Int
+  title        String
+  episodes     Episode[]
+  @@unique([dramaId, seasonNumber])
+}
+model Episode {
+  id            String @id @default(uuid())
+  seasonId      String
+  season        Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  episodeNumber Int
+  title         String
+  runtime       Int?
+  description   String
+  thumbnailUrl  String?
+  airDate       String?
+  sources       EpisodeSource[]
+  subtitles     EpisodeSubtitle[]
+  progress      EpisodeProgress[]
+  @@unique([seasonId, episodeNumber])
+}
+model EpisodeSource {
+  id        String @id @default(uuid())
+  episodeId String
+  episode   Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  movieId   String @unique
+  movie     Movie @relation(fields: [movieId], references: [id], onDelete: Restrict)
+  enabled   Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@index([episodeId, enabled])
+}
+model EpisodeSubtitle {
+  id        String @id @default(uuid())
+  episodeId String
+  episode   Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  language  String
+  label     String
+  vtt       String
+  cues      Json
+  @@unique([episodeId, language])
+}
+model EpisodeProgress {
+  id              String @id @default(uuid())
+  userId          String
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodeId       String
+  episode         Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  positionSeconds Float
+  durationSeconds Float
+  completed       Boolean @default(false)
+  sessionId       String
+  sequence        Int @default(0)
+  lastWatchedAt   DateTime @default(now())
+  @@unique([userId, episodeId])
+  @@index([userId, lastWatchedAt])
 }
