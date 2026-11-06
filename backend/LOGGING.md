@@ -45,6 +45,26 @@ For the current Android investigation, filter player events by
 the renderer. Cookies and JavaScript remain enabled; no browser user-agent
 spoofing or provider access-control bypass is added.
 
+### VidEasy certificate failure reported on Android
+
+An Android report for `videasy.xyz` contained native error code `3` and
+`SSL error: The certificate authority is not trusted`, followed by a switch to
+VidCore after 844 ms. This establishes a certificate-trust rejection on that
+connection, rather than a loading timeout. It does not establish whether the
+cause is an incomplete/untrusted certificate chain at the provider, a device
+trust-store difference, or interception on the device/network.
+
+New clients label native `SSL error:` failures with `reason: "ssl_error"`.
+Older client versions may label the same error `network_error`; consult the
+message and native code too. Deploy backend support for the new reason before
+delivering that client update.
+
+Certificate validation remains enabled. Fixing the provider's trusted certificate
+chain or using a verified, authorized HTTPS endpoint is the appropriate source
+change. Do not add SSL bypasses or silently accept untrusted certificates. A
+successful browser load alone does not prove that Android WebView trusts the
+same chain: browser and device trust behavior can differ.
+
 ## Delivery and privacy
 
 The app sends authenticated, validated, best-effort events to

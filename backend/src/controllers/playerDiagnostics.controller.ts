@@ -6,7 +6,7 @@ import { logger, safeLogMessage } from '../services/logger';
 import type { PlayerDiagnosticEvent } from '@togetherflix/shared';
 
 const events = new Set(['attempt_started', 'document_loaded', 'load_error', 'timeout', 'fallback', 'server_selected', 'navigation_blocked', 'exhausted']);
-const reasons = new Set(['http_error', 'network_error', 'stalled_load', 'load_deadline', 'manual_next', 'manual_select', 'retry']);
+const reasons = new Set(['http_error', 'network_error', 'ssl_error', 'stalled_load', 'load_deadline', 'manual_next', 'manual_select', 'retry']);
 const providerIds = new Set(EMBED_PROVIDER_CONFIGS.map((provider) => provider.id));
 const providerNames = new Map(EMBED_PROVIDER_CONFIGS.map((provider) => [provider.id, provider.name]));
 const integer = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;

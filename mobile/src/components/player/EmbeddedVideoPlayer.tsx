@@ -35,7 +35,15 @@ export function EmbeddedVideoPlayer({ url, title, onLoad, onLoadStart, onLoadPro
     onLoad={onLoad}
     onLoadStart={onLoadStart}
     onLoadProgress={(event) => onLoadProgress?.(event.nativeEvent.progress)}
-    onError={(event) => onError?.(event.nativeEvent.description || 'The embedded player failed to load.', { errorCode: event.nativeEvent.code, url: event.nativeEvent.url })}
+    onError={(event) => {
+      const failure = event.nativeEvent;
+      // RNCWebView reports certificate failures with the "SSL error:" prefix.
+      // Keep native certificate validation in place and report its real cause.
+      const ssl = /^SSL error:/i.test(failure.description || '');
+      onError?.(failure.description || 'The embedded player failed to load.', {
+        errorCode: failure.code, url: failure.url, kind: ssl ? 'ssl_error' : undefined,
+      });
+    }}
     onHttpError={(event) => onError?.(`The embedded player returned HTTP ${event.nativeEvent.statusCode}.`, { statusCode: event.nativeEvent.statusCode, url: event.nativeEvent.url })}
     onRenderProcessGone={Platform.OS === 'android' ? (event) => onError?.(
       event.nativeEvent.didCrash ? 'The Android WebView renderer crashed while loading this player.' : 'Android closed the WebView renderer while loading this player.',
