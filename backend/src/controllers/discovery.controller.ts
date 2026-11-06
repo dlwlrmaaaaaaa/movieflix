@@ -6,6 +6,18 @@ import { StreamingSourceService } from '../services/streamingSource.service';
 import { TmdbService, UpstreamServiceError } from '../services/tmdb.service';
 import { embedProviderRegistry } from '../services/embedProviderRegistry';
 import { validatedTmdbId, validatedTvUrlFormat } from '../services/embedUrlBuilder';
+import { logger, safeLogMessage } from '../services/logger';
+import type { EmbeddedPlayerDescriptor } from '@togetherflix/shared';
+
+function logEmbedSelection(req: AuthenticatedRequest, res: Response, player: EmbeddedPlayerDescriptor, players: EmbeddedPlayerDescriptor[]) {
+  logger.info('embed.selected', { requestId: res.locals.requestId, userId: req.user!.id,
+    mediaType: player.mediaType, tmdbId: player.tmdbId, season: player.season, episode: player.episode,
+    platform: req.query.platform === 'web' ? 'web' : 'mobile', providerId: player.providerId, providerName: player.providerName,
+    providerOrder: players.map((item) => item.providerId), embedHost: new URL(player.embedUrl).hostname,
+    // Resolving an embed URL does not verify that its video can actually play.
+    verification: 'configured_embed_url',
+  });
+}
 
 function sendError(error: unknown, res: Response, next: NextFunction): void {
   if (error instanceof UpstreamServiceError) {
@@ -97,11 +109,13 @@ export class DiscoveryController {
       const players = await embedProviderRegistry.resolveAll({ mediaType: 'movie', tmdbId: movie.id }, platform);
       const player = players[0];
       if (!player) {
+        logger.warn('embed.unavailable', { requestId: res.locals.requestId, mediaType: 'movie', tmdbId: movie.id });
         res.status(404).json({ success: false, message: 'No authorized embedded player is configured for this movie.' });
         return;
       }
+      logEmbedSelection(req, res, player, players);
       res.json({ success: true, player, players });
-    } catch (error) { sendError(error, res, next); }
+    } catch (error) { logger.warn('embed.resolve_error', { requestId: res.locals.requestId, mediaType: 'movie', message: safeLogMessage(error) }); sendError(error, res, next); }
   }
 
   static async tvEmbed(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -121,11 +135,13 @@ export class DiscoveryController {
       }, platform);
       const player = players[0];
       if (!player) {
+        logger.warn('embed.unavailable', { requestId: res.locals.requestId, mediaType: 'tv', tmdbId: show.tmdbId });
         res.status(404).json({ success: false, message: 'No authorized embedded player is configured for this TV episode.' });
         return;
       }
+      logEmbedSelection(req, res, player, players);
       res.json({ success: true, player, players });
-    } catch (error) { sendError(error, res, next); }
+    } catch (error) { logger.warn('embed.resolve_error', { requestId: res.locals.requestId, mediaType: 'tv', message: safeLogMessage(error) }); sendError(error, res, next); }
   }
 
   static async createWatchParty(req: AuthenticatedRequest, res: Response, next: NextFunction) {

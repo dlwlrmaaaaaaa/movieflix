@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { authMiddleware, requireAdmin } from '../middlewares/auth.middleware';
 import { MovieController } from '../controllers/movie.controller';
 import { DiscoveryController } from '../controllers/discovery.controller';
-import { movieDiscoveryRateLimiter, roomRateLimiter } from '../middlewares/rateLimiter.middleware';
+import { movieDiscoveryRateLimiter, roomRateLimiter, playerDiagnosticsRateLimiter } from '../middlewares/rateLimiter.middleware';
+import { reportPlayerEvent } from '../controllers/playerDiagnostics.controller';
 
 const router = Router();
 router.use(authMiddleware);
+router.post('/player-events', playerDiagnosticsRateLimiter, reportPlayerEvent);
 router.get('/', MovieController.list);
 router.get('/trending', movieDiscoveryRateLimiter, DiscoveryController.trending);
 router.get('/popular', movieDiscoveryRateLimiter, DiscoveryController.popular);

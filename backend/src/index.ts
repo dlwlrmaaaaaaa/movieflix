@@ -15,6 +15,7 @@ import userRoutes from './routes/user.routes';
 import partyLandingRoutes from './routes/partyLanding.routes';
 import { SocketManager } from './sockets/socketManager';
 import { prisma } from './prisma';
+import { requestLogger } from './services/logger';
 
 const app = express();
 const server = http.createServer(app);
@@ -54,6 +55,7 @@ app.get('/health/ready', async (_req, res) => {
 app.use('/party', partyLandingRoutes);
 
 // API Routes
+app.use('/api', requestLogger);
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/call', callRoutes);

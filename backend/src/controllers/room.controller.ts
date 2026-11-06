@@ -7,6 +7,7 @@ import { RoomService } from '../services/room.service';
 import { prisma } from '../prisma';
 import { LiveKitService } from '../services/livekit.service';
 import { embedProviderRegistry } from '../services/embedProviderRegistry';
+import { logger } from '../services/logger';
 
 export class RoomController {
   static async startMovie(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -75,6 +76,9 @@ export class RoomController {
       const players = await embedProviderRegistry.resolveAll({ mediaType: 'movie', tmdbId: selection.tmdbId }, req.query.platform === 'web' ? 'web' : 'mobile');
       const player = players.find((item) => item.providerId === selection.providerId);
       if (!player) { res.status(404).json({ success: false, message: 'The selected provider is no longer authorized or available.' }); return; }
+      logger.info('embed.room_selected', { requestId: res.locals.requestId, roomId: room.id, userId: req.user!.id,
+        mediaType: player.mediaType, tmdbId: player.tmdbId, providerId: player.providerId,
+        embedHost: new URL(player.embedUrl).hostname, verification: 'configured_embed_url' });
       res.json({ success: true, player });
     } catch (error) { next(error); }
   }

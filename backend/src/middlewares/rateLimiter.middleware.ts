@@ -23,3 +23,12 @@ export const movieDiscoveryRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Separate budget: player diagnostics must not consume movie discovery quota.
+export const playerDiagnosticsRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Player diagnostics rate limit reached.' },
+});
